@@ -167,6 +167,11 @@
   .pl { font-size:.7rem; font-weight:700; margin-top:3px; }
   .pl.up { color:#5bd08a; } .pl.down { color:#e06a6a; } .pl.flat { color:var(--muted); }
   .badge-sold { font-size:.6rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; background:var(--surface-2); border:1px solid var(--border); color:var(--gold); padding:2px 6px; border-radius:5px; margin-left:6px; }
+  .badge-target { font-size:.6rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; background:rgba(91,208,138,.12); border:1px solid #2f7d52; color:#5bd08a; padding:2px 6px; border-radius:5px; margin-left:6px; white-space:nowrap; }
+  .collection-item.target-hit { border-color:#2f7d52; }
+  .wtarget { cursor:pointer; border-bottom:1px dashed transparent; }
+  .wtarget:hover { color:var(--gold); border-bottom-color:var(--gold); }
+  .wtarget input { width:84px; text-align:right; padding:3px 6px; }
 
   .empty { color:var(--muted); text-align:center; padding:40px; border:1px dashed var(--border); border-radius:var(--radius); }
   .an-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:18px; }
@@ -471,6 +476,10 @@
     <div class="an-card">
       <h3>Aufteilung nach Spiel</h3>
       <div id="an-game"></div>
+    </div>
+    <div class="an-card">
+      <h3>Aufteilung nach Sprache</h3>
+      <div id="an-lang"></div>
     </div>
     <div class="an-card">
       <h3>Aufteilung nach Seltenheit</h3>
@@ -996,6 +1005,41 @@ async function startAppAfterAuth() {
     try { await navigator.serviceWorker.register('sw.js'); } catch (e) { console.warn('Service Worker:', e); }
   }
   route();
+  autoRefreshPrices(); // laeuft im Hintergrund, blockiert den Start nicht
+}
+
+// ---- Automatischer Preis-Refresh beim Start (hoechstens 1x pro 24h) ----
+// Haelt den Wertverlauf aktuell, ohne dass man an den Knopf denken muss.
+// Der Zeitstempel wird pro Account gespeichert und erst NACH erfolgreichem
+// Durchlauf gesetzt -- schlaegt etwas fehl, wird es beim naechsten Start
+// einfach erneut versucht.
+async function autoRefreshPrices() {
+  try {
+    const sess = await self.DB.getSession();
+    const uid = sess && sess.user ? sess.user.id : 'anon';
+    const KEY = 'ttt-auto-refresh-' + uid;
+    const last = parseInt(localStorage.getItem(KEY) || '0', 10);
+    if (Date.now() - last < 24 * 60 * 60 * 1000) return;
+    const d = await (await fetch('api/collection')).json();
+    const hasCards = d.cards && d.cards.length;
+    const w = await (await fetch('api/wishlist')).json().catch(() => ({ items: [] }));
+    const hasWishes = w.items && w.items.length;
+    if (!hasCards && !hasWishes) { localStorage.setItem(KEY, String(Date.now())); return; }
+    const btn = document.getElementById('refresh-btn');
+    const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Auto-Update läuft…';
+    try {
+      if (hasCards) await fetch('api/collection/refresh-prices', { method: 'POST' });
+      if (hasWishes) await fetch('api/wishlist/refresh-prices', { method: 'POST' });
+      localStorage.setItem(KEY, String(Date.now()));
+    } finally { btn.disabled = false; btn.textContent = orig; }
+    // Gerade sichtbare Ansicht mit den frischen Zahlen neu laden
+    const view = (location.hash.replace('#/', '') || 'suche');
+    if (view === 'sammlung') { loadCollection(); loadHistory(); }
+    else if (view === 'wunschliste') loadWishlist();
+    else if (view === 'analyse') loadAnalyse();
+    else { refreshWishCount(); }
+  } catch (e) { console.warn('Auto-Refresh übersprungen:', e); }
 }
 function showAuth(msg) {
   authScreenEl.style.display = '';
@@ -1038,6 +1082,13 @@ const fmt = (n, cur='EUR') => (n ?? 0).toLocaleString(cur==='USD'?'en-US':'de-DE
 const GAME_LABEL = { pokemon:'Pokémon', magic:'Magic', yugioh:'Yu-Gi-Oh', onepiece:'One Piece' };
 const FLAGS = { de:'🇩🇪', en:'🇬🇧', fr:'🇫🇷', es:'🇪🇸', it:'🇮🇹', pt:'🇵🇹', 'pt-br':'🇧🇷', 'pt-pt':'🇵🇹', nl:'🇳🇱', pl:'🇵🇱', ru:'🇷🇺', ja:'🇯🇵', ko:'🇰🇷', 'zh-tw':'🇹🇼', 'zh-cn':'🇨🇳', id:'🇮🇩', th:'🇹🇭', zhs:'🇨🇳', zht:'🇹🇼' };
 function flagFor(code){ return code ? (FLAGS[String(code).toLowerCase()] || '') : ''; }
+function langLabel(code){
+  code = String(code || '').toLowerCase();
+  if (!code || code === '—') return 'Unbekannt';
+  const all = [].concat(...Object.values(META.languages || {}));
+  const f = all.find(([c]) => c === code);
+  return f ? f[1] : code.toUpperCase();
+}
 let META = { languages:{ pokemon:[['de','Deutsch'],['en','English']] }, numberSearch:{pokemon:true,magic:true,yugioh:false,onepiece:true} };
 let viewMode = localStorage.getItem('tcg-view') || 'grid';
 let searchToken = 0;
@@ -1479,6 +1530,8 @@ function renderAnalyse(data) {
       <span class="nm">${escapeHtml(c.name)} <small>${c.qty>1?`×${c.qty} · `:''}${escapeHtml(c.setName||'')}</small></span>
       <span class="vl">${fmt(c.value, c.currency)}</span></div>`).join('') : '<div class="msub">Noch keine Karten in der Sammlung.</div>';
   document.getElementById('an-game').innerHTML = anBar(an.byGame);
+  const langRows = (an.byLanguage || []).map(r => ({ key: `${flagFor(r.key)} ${langLabel(r.key)}`.trim(), value: r.value }));
+  document.getElementById('an-lang').innerHTML = anBar(langRows);
   document.getElementById('an-rarity').innerHTML = anBar(an.byRarity);
   document.getElementById('an-set').innerHTML = anBar(an.bySet);
   document.getElementById('an-cond').innerHTML = anBar(an.byCondition);
@@ -1578,13 +1631,23 @@ async function loadWishlist() {
   document.getElementById('wish-count').textContent = wishlistItems.length ? `(${wishlistItems.length})` : '';
   const t = d.totals || { eur:0, usd:0 };
   document.getElementById('wish-value').textContent = fmt(t.eur, 'EUR');
-  document.getElementById('wish-breakdown').textContent = t.usd > 0 ? `+ ${fmt(t.usd,'USD')} (One Piece)` : '';
+  const hits = wishlistItems.filter(isTargetHit).length;
+  const parts = [];
+  if (t.usd > 0) parts.push(`+ ${fmt(t.usd,'USD')} (USD)`);
+  if (hits) parts.push(`🎯 ${hits} Karte${hits===1?'':'n'} unterm Zielpreis`);
+  document.getElementById('wish-breakdown').textContent = parts.join(' · ');
   renderWishlist();
+}
+// Zielpreis erreicht? (Preis pro Stueck vs. Zielpreis pro Stueck)
+function isTargetHit(c) {
+  return c.target_price != null && c.price_current != null && c.price_current <= c.target_price;
 }
 function renderWishlist() {
   const el = document.getElementById('wishlist');
   if (!wishlistItems.length) { el.innerHTML = '<div class="empty">Noch keine Wünsche. Tippe in der Suche bei einer Karte auf ♡.</div>'; return; }
-  el.innerHTML = wishlistItems.map(renderWishItem).join('');
+  // Erreichte Zielpreise nach oben sortieren
+  const items = [...wishlistItems].sort((a, b) => (isTargetHit(b)?1:0) - (isTargetHit(a)?1:0));
+  el.innerHTML = items.map(renderWishItem).join('');
 }
 function renderWishItem(c) {
   const cur = c.currency || 'EUR';
@@ -1594,17 +1657,19 @@ function renderWishItem(c) {
   const sub = [];
   if (c.price_low != null) sub.push(`Ab ${fmt(c.price_low, cur)}`);
   if (c.price_trend != null) sub.push(`Trend ${fmt(c.price_trend, cur)}`);
+  const hit = isTargetHit(c);
   return `
-    <div class="collection-item" data-id="${c.id}">
+    <div class="collection-item${hit?' target-hit':''}" data-id="${c.id}">
       ${c.image_url ? `<img src="${c.image_url}" alt="" data-act="detail" title="Details ansehen" />` : ''}
       <div class="ci-main">
-        <div class="ci-name">${escapeHtml(c.name)}</div>
+        <div class="ci-name">${escapeHtml(c.name)}${hit?'<span class="badge-target">🎯 Zielpreis erreicht</span>':''}</div>
         <div class="ci-sub">${GAME_LABEL[c.game]} · <span class="flag">${flagFor(c.language)}</span>${escapeHtml(c.set_name||'')}${ref?` · <b>${escapeHtml(ref)}</b>`:''}${c.cardmarket_url?` · <a href="${c.cardmarket_url}" target="_blank" rel="noopener" class="cm-link">Cardmarket ↗</a>`:''}</div>
       </div>
       <div class="ci-spacer"></div>
       <div class="ci-prices">
         <div class="ci-price">${unit!=null?fmt(line,cur):'kein Preis'}</div>
         ${sub.length?`<div class="ci-subprice">${sub.join(' · ')}</div>`:''}
+        <div class="ci-subprice wtarget" data-act="target" title="Zielpreis setzen/ändern – bei Erreichen wird die Karte markiert">🎯 ${c.target_price!=null?fmt(c.target_price,cur):'Zielpreis setzen'}</div>
       </div>
       <button class="wtocoll" data-act="tocoll" title="In die Sammlung übernehmen">→ Sammlung</button>
       <button class="ci-del" data-act="wdel" title="Aus Wunschliste entfernen">✕</button>
@@ -1615,6 +1680,24 @@ document.getElementById('wishlist').addEventListener('click', async e=>{
   const id = Number(item.dataset.id); const act = e.target.closest('[data-act]')?.dataset.act;
   const c = wishlistItems.find(w=>w.id===id);
   if (act==='detail') openDetail(c);
+  else if (act==='target') {
+    const cell = item.querySelector('.wtarget');
+    if (!cell || cell.querySelector('input')) return;
+    const cur = c && c.target_price != null ? c.target_price : '';
+    cell.innerHTML = `<input type="text" value="${cur}" placeholder="z. B. 5,00" />`;
+    const input = cell.querySelector('input'); input.focus(); input.select();
+    let done = false;
+    const save = async () => {
+      if (done) return; done = true;
+      const raw = String(input.value).trim().replace(',', '.');
+      const val = raw === '' ? null : parseFloat(raw);
+      await fetch('api/wishlist/'+id, { method:'PATCH', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ target_price: (val != null && Number.isFinite(val) && val >= 0) ? val : null }) });
+      await loadWishlist();
+    };
+    input.addEventListener('keydown', ev=>{ if(ev.key==='Enter') save(); if(ev.key==='Escape'){ done=true; renderWishlist(); } });
+    input.addEventListener('blur', save);
+  }
   else if (act==='wdel') { await fetch('api/wishlist/'+id,{method:'DELETE'}); await loadWishlist(); }
   else if (act==='tocoll') {
     const r = await fetch('api/wishlist/'+id+'/to-collection',{method:'POST'});
@@ -1628,7 +1711,9 @@ document.getElementById('wish-refresh').addEventListener('click', async e=>{
     const r = await fetch('api/wishlist/refresh-prices',{method:'POST'});
     const d = await r.json().catch(()=>({}));
     await loadWishlist();
+    const hits = wishlistItems.filter(isTargetHit).length;
     if (d.errors && d.errors.length) { b.textContent = `${d.updated}/${d.total} aktualisiert (${d.errors.length} Fehler)`; setTimeout(()=>{ b.textContent=t; }, 2600); return; }
+    if (hits) { b.textContent = `🎯 ${hits}× Zielpreis erreicht`; setTimeout(()=>{ b.textContent=t; }, 2600); return; }
   } finally { b.disabled=false; if (b.textContent==='Aktualisiere…') b.textContent=t; }
 });
 
