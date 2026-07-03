@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Tiny Tokyo Tracker</title>
 <link rel="manifest" href="manifest.json" />
 <meta name="theme-color" content="#1e293b" />
@@ -197,7 +197,7 @@
   .mv-pct{font-weight:700;} .mv-pct.up{color:#5bd08a;} .mv-pct.down{color:#e06a6a;}
   .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; z-index:50; padding:16px; }
   .modal-bg.open { display:flex; }
-  .modal { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:20px 22px; width:100%; max-width:420px; }
+  .modal { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:20px 22px; width:100%; max-width:420px; max-height:92vh; overflow-y:auto; -webkit-overflow-scrolling:touch; }
   .modal h3 { margin:0 0 4px; font-family:'Space Grotesk',sans-serif; font-size:1.05rem; }
   .modal .msub { color:var(--muted); font-size:.82rem; margin-bottom:14px; }
   .modal .field { margin-bottom:12px; }
@@ -217,7 +217,7 @@
   .gcompany { display:inline-block; min-width:34px; text-align:center; font-size:.62rem; font-weight:700; padding:2px 6px; border-radius:5px; background:#2a313c; color:#cdd4de; margin-right:8px; }
   .gcompany.PSA{background:#b3122b;color:#fff;} .gcompany.BGS{background:#1d3b6e;color:#fff;}
   .gcompany.CGC{background:#0b7a5e;color:#fff;} .gcompany.SGC{background:#3a3a3a;color:#fff;}
-  .info-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px 24px; margin-bottom:16px; }
+  .info-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px 24px; margin-bottom:16px; overflow-x:auto; }
   .info-card h3 { font-family:'Space Grotesk',sans-serif; margin:0 0 10px; font-size:1.05rem; }
   .info-card p, .info-card li { color:#c7cdd6; font-size:.92rem; }
   .info-card ol, .info-card ul { padding-left:20px; margin:8px 0; }
@@ -292,6 +292,10 @@
 
   .an-grid { grid-template-columns:repeat(2,1fr); }
   .modal { padding:18px 16px; }
+  .qty button { padding:6px 12px; }
+  .ladd { padding:7px 11px; }
+  .detail-img { text-align:center; }
+  .detail-img img { width:220px; max-width:100%; }
 }
 @media (max-width:400px) {
   .grid { grid-template-columns:repeat(auto-fill,minmax(135px,1fr)); }
@@ -1197,23 +1201,31 @@ async function enrichPending(token, lang) {
   const pending = lastResults.filter(c => c.needsDetail);
   if (!pending.length) return;
   const status = document.getElementById('search-status');
+  // Nach Sprache der Fundstelle gruppieren: Karten aus der japanischen
+  // Datenbank werden auf Japanisch nachgeladen, englische auf Englisch usw. --
+  // sonst laufen die Detail-Abfragen ins Leere und Preise/Set-Namen fehlen.
+  const groups = new Map();
+  for (const c of pending) { const k = c.lang || lang; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(c); }
+  const total = pending.length;
   const CHUNK = 40; let done = 0;
-  for (let i=0; i<pending.length; i+=CHUNK) {
-    const slice = pending.slice(i, i+CHUNK);
-    try {
-      const r = await fetch('api/enrich', { method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ game:'pokemon', ids: slice.map(c=>c.externalId), lang }) });
-      const { details } = await r.json();
+  for (const [glang, items] of groups) {
+    for (let i=0; i<items.length; i+=CHUNK) {
+      const slice = items.slice(i, i+CHUNK);
+      try {
+        const r = await fetch('api/enrich', { method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ game:'pokemon', ids: slice.map(c=>c.externalId), lang: glang }) });
+        const { details } = await r.json();
+        if (token !== searchToken) return;
+        for (const c of slice) {
+          const d = details[c.externalId]; c.needsDetail = false;
+          if (d) { c.cardmarketPrice=d.cardmarketPrice; c.priceLow=d.priceLow; c.priceTrend=d.priceTrend; c.rarity=d.rarity; c.setName=d.setName; if(d.setCode) c.setCode=d.setCode; if(d.currency) c.currency=d.currency; c.extra=d.extra||{}; }
+        }
+      } catch { for (const c of slice) c.needsDetail=false; }
       if (token !== searchToken) return;
-      for (const c of slice) {
-        const d = details[c.externalId]; c.needsDetail = false;
-        if (d) { c.cardmarketPrice=d.cardmarketPrice; c.priceLow=d.priceLow; c.priceTrend=d.priceTrend; c.rarity=d.rarity; c.setName=d.setName; if(d.setCode) c.setCode=d.setCode; c.extra=d.extra||{}; }
-      }
-    } catch { for (const c of slice) c.needsDetail=false; }
-    if (token !== searchToken) return;
-    done += slice.length;
-    buildFilters(lastResults); applySearchFilters();
-    status.textContent = done<pending.length ? `Preise werden geladen… ${done}/${pending.length}` : '';
+      done += slice.length;
+      buildFilters(lastResults); applySearchFilters();
+      status.textContent = done<total ? `Preise werden geladen… ${done}/${total}` : '';
+    }
   }
 }
 
@@ -1248,7 +1260,7 @@ function extraLine(c) {
   return '';
 }
 function priceMain(c) {
-  const label = c.game==='onepiece' ? 'TCG $' : (c.game==='pokemon' ? '30T' : 'CM');
+  const label = c.currency==='USD' ? 'TCG $' : (c.game==='pokemon' ? '30T' : 'CM');
   if (c.cardmarketPrice != null) return `<div class="price">${fmt(c.cardmarketPrice, c.currency)} <small>${label}</small></div>`;
   if (c.needsDetail) return `<div class="price none">Preis lädt…</div>`;
   return `<div class="price none">kein Preis</div>`;
@@ -1604,12 +1616,20 @@ document.getElementById('wishlist').addEventListener('click', async e=>{
   const c = wishlistItems.find(w=>w.id===id);
   if (act==='detail') openDetail(c);
   else if (act==='wdel') { await fetch('api/wishlist/'+id,{method:'DELETE'}); await loadWishlist(); }
-  else if (act==='tocoll') { await fetch('api/wishlist/'+id+'/to-collection',{method:'POST'}); await loadWishlist(); }
+  else if (act==='tocoll') {
+    const r = await fetch('api/wishlist/'+id+'/to-collection',{method:'POST'});
+    if (!r.ok) { const d = await r.json().catch(()=>({})); alert(d.error || 'Konnte nicht in die Sammlung übernommen werden. Bitte erneut versuchen.'); }
+    await loadWishlist();
+  }
 });
 document.getElementById('wish-refresh').addEventListener('click', async e=>{
   const b=e.target, t=b.textContent; b.disabled=true; b.textContent='Aktualisiere…';
-  try { await fetch('api/wishlist/refresh-prices',{method:'POST'}); await loadWishlist(); }
-  finally { b.disabled=false; b.textContent=t; }
+  try {
+    const r = await fetch('api/wishlist/refresh-prices',{method:'POST'});
+    const d = await r.json().catch(()=>({}));
+    await loadWishlist();
+    if (d.errors && d.errors.length) { b.textContent = `${d.updated}/${d.total} aktualisiert (${d.errors.length} Fehler)`; setTimeout(()=>{ b.textContent=t; }, 2600); return; }
+  } finally { b.disabled=false; if (b.textContent==='Aktualisiere…') b.textContent=t; }
 });
 
 // ---- Karten-Detailansicht ----
@@ -1905,8 +1925,12 @@ document.getElementById('sold-list').addEventListener('click', async e=>{
 });
 document.getElementById('sold-refresh').addEventListener('click', async e=>{
   const b=e.target, t=b.textContent; b.disabled=true; b.textContent='Aktualisiere…';
-  try { await fetch('api/sold/refresh-prices',{method:'POST'}); await loadSold(); }
-  finally { b.disabled=false; b.textContent=t; }
+  try {
+    const r = await fetch('api/sold/refresh-prices',{method:'POST'});
+    const d = await r.json().catch(()=>({}));
+    await loadSold();
+    if (d.errors && d.errors.length) { b.textContent = `${d.updated}/${d.total} aktualisiert (${d.errors.length} Fehler)`; setTimeout(()=>{ b.textContent=t; }, 2600); return; }
+  } finally { b.disabled=false; if (b.textContent==='Aktualisiere…') b.textContent=t; }
 });
 
 
@@ -1955,7 +1979,7 @@ async function updateModalPriceForLang() {
     const r = await fetch('api/enrich', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ game:'pokemon', ids:[addModalCard.externalId], lang }) });
     const { details } = await r.json();
     const d = details[addModalCard.externalId];
-    if (d) addModalPrice = { price:d.cardmarketPrice, low:d.priceLow, trend:d.priceTrend, name:d.name || addModalCard.name, currency:'EUR' };
+    if (d) addModalPrice = { price:d.cardmarketPrice, low:d.priceLow, trend:d.priceTrend, name:d.name || addModalCard.name, currency:d.currency || 'EUR' };
   } catch {}
   renderModalPrice();
 }
@@ -1986,10 +2010,13 @@ async function confirmAdd() {
 async function patchCard(id, body) { await fetch('api/collection/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); await loadCollection(); refreshSoldCount(); }
 async function removeCard(id) { await fetch('api/collection/'+id,{method:'DELETE'}); await loadCollection(); }
 async function refreshPrices() {
-  const btn = document.getElementById('refresh-btn'); btn.textContent='Aktualisiere…'; btn.disabled=true;
-  await fetch('api/collection/refresh-prices',{method:'POST'});
-  await loadCollection(); await loadHistory();
-  btn.textContent='Preise aktualisieren'; btn.disabled=false;
+  const btn = document.getElementById('refresh-btn'); const orig='Preise aktualisieren'; btn.textContent='Aktualisiere…'; btn.disabled=true;
+  try {
+    const r = await fetch('api/collection/refresh-prices',{method:'POST'});
+    const d = await r.json().catch(()=>({}));
+    await loadCollection(); await loadHistory();
+    if (d.errors && d.errors.length) { btn.textContent = `${d.updated}/${d.total} aktualisiert (${d.errors.length} Fehler)`; setTimeout(()=>{ btn.textContent=orig; }, 2600); return; }
+  } finally { btn.disabled=false; if (btn.textContent==='Aktualisiere…') btn.textContent=orig; }
 }
 function editPrice(item, card) {
   const cell = item.querySelector('.ci-price');

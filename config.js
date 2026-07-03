@@ -5,16 +5,14 @@
 //
 // WICHTIG (ehrlich kommunizieren): Diese Aufrufe laufen jetzt direkt aus dem Browser.
 // Das funktioniert nur, wenn die jeweilige API "CORS" für Browser-Zugriffe erlaubt.
-// TCGdex, Scryfall und YGOPRODeck sind dafür ausgelegt. Bei optcgapi.com (One Piece)
-// ist das nicht mit letzter Sicherheit getestet – falls dort Fehler auftreten, ist das
-// eine Grenze der kostenlosen Quelle, kein Bug in der App.
+// TCGdex, Scryfall, YGOPRODeck und optcgapi.com sind dafür ausgelegt (getestet).
 
 (function () {
   'use strict';
 
   const TIMEOUT_MS = 9000;
   const SAFETY_MAX = 500;
-  const POKEMON_MAX = 250;
+  const POKEMON_MAX = 400;
   const POKEMON_CONCURRENCY = 12;
 
   const LANGUAGES = {
@@ -62,6 +60,8 @@
   }
 
   function num(v) { const n = parseFloat(v); return Number.isFinite(n) ? n : null; }
+  // Preis > 0 oder null -- "0.00" bedeutet bei den Quellen "kein Preis erfasst".
+  function posOrNull(v) { const n = num(v); return n != null && n > 0 ? n : null; }
 
   function cmSearchUrl(game, name) {
     const path = { pokemon: 'Pokemon', yugioh: 'YuGiOh', onepiece: 'One-Piece' }[game] || 'Pokemon';
@@ -122,6 +122,45 @@
     return entry.byCode.get(key) || null;
   }
 
+  // --- Pokémon: mehrsprachige Namensauflösung -------------------------------
+  // Die TCGdex-Datenbanken sind pro Sprache getrennt und kennen nur die Namen
+  // ihrer eigenen Sprache ("Pikachu" findet in der japanischen DB nichts,
+  // "ピカチュウ" in der englischen nichts). Über pokemon-i18n.json wird der
+  // Suchbegriff deshalb übersetzt, damit jede Datenbank mit dem passenden
+  // Namen abgefragt werden kann.
+  let pokeI18n = null;
+  async function loadPokeI18n() {
+    if (pokeI18n) return pokeI18n;
+    try { pokeI18n = await (await fetch('pokemon-i18n.json')).json(); }
+    catch { pokeI18n = { langs: [], rows: [] }; }
+    if (!pokeI18n || !Array.isArray(pokeI18n.langs) || !Array.isArray(pokeI18n.rows)) pokeI18n = { langs: [], rows: [] };
+    return pokeI18n;
+  }
+  // Liefert { de:'Pikachu', ja:'ピカチュウ', ... } zum Suchbegriff (bester Treffer:
+  // exakt > Wortanfang > enthalten) oder null, wenn kein Pokémon passt.
+  async function pokeNameVariants(q) {
+    const data = await loadPokeI18n();
+    const t = String(q || '').trim().toLowerCase();
+    if (!t || !data.rows.length) return null;
+    let best = null, bestScore = 0;
+    for (const row of data.rows) {
+      for (const n of row) {
+        if (!n) continue;
+        const ln = n.toLowerCase();
+        const score = ln === t ? 3 : ln.startsWith(t) ? 2 : ln.includes(t) ? 1 : 0;
+        if (score > bestScore) { bestScore = score; best = row; }
+        if (bestScore === 3) break;
+      }
+      if (bestScore === 3) break;
+    }
+    if (!best) return null;
+    const map = {};
+    data.langs.forEach((lg, i) => { if (best[i]) map[lg] = best[i]; });
+    return map;
+  }
+  // Erkennt japanische/chinesische/koreanische Schriftzeichen im Suchbegriff.
+  const hasCJK = (s) => /[぀-ヿ㐀-䶿一-鿿가-힯ｦ-ﾟ]/.test(String(s || ''));
+
   function localIdMatches(lid, number, forms) {
     const s = String(lid);
     return forms.includes(s) || String(parseInt(s, 10)) === number;
@@ -139,38 +178,81 @@
     const locale = langFor('pokemon', lang);
     let briefs = [], setHint = null;
     if (mode === 'number') {
-      const parsed = parseNumberQuery(q);
-      const number = parsed.number, rawDigits = parsed.rawDigits, h = parsed.setHint;
+      // Set-Kürzel auch mit Ziffern erlauben (z. B. "SV8a 236", "OBF 125"):
+      // erstes Wort mit Buchstaben = Set-Hinweis, letzte Zahlengruppe = Nummer.
+      const raw = q.trim();
+      const tokens = raw.split(/\s+/).filter(Boolean);
+      let h = null, numPart = raw;
+      if (tokens.length >= 2 && /[A-Za-z]/.test(tokens[0])) { h = tokens[0]; numPart = tokens.slice(1).join(' '); }
+      if (!h) h = parseNumberQuery(raw).setHint;
+      const m = numPart.match(/(\d+)(?!.*\d)/);
+      const rawDigits = m ? m[1] : null;
+      const number = m ? String(parseInt(m[1], 10)) : null;
       setHint = h;
       if (!number) return [];
       const forms = [...new Set([number, rawDigits].filter(Boolean))];
-      const resolvedSetId = h ? await resolvePokeSetId(h, locale) : null;
-      if (resolvedSetId) {
-        const set = await get(`https://api.tcgdex.net/v2/${locale}/sets/${encodeURIComponent(resolvedSetId)}`).catch(() => null);
+      // Set-Hinweis in mehreren Sprach-Datenbanken auflösen (gewählte Sprache,
+      // dann Englisch, dann Japanisch) -- japanische Sets wie "SV8a" existieren
+      // nur in der japanischen Datenbank.
+      const locs = [...new Set([locale, 'en', 'ja'])];
+      let resolved = null;
+      if (h) {
+        for (const loc of locs) {
+          const sid = await resolvePokeSetId(h, loc).catch(() => null);
+          if (sid) { resolved = { sid, loc }; break; }
+        }
+      }
+      if (resolved) {
+        const set = await get(`https://api.tcgdex.net/v2/${resolved.loc}/sets/${encodeURIComponent(resolved.sid)}`).catch(() => null);
         const setCards = set && Array.isArray(set.cards) ? set.cards : [];
         briefs = setCards.filter((b) => localIdMatches(b.localId, number, forms));
+        for (const b of briefs) b._loc = resolved.loc;
         setHint = null;
       } else {
-        const arrays = await Promise.all(
-          forms.map((f) => get(`https://api.tcgdex.net/v2/${locale}/cards?localId=eq:${encodeURIComponent(f)}`).catch(() => []))
-        );
         const seen = new Set();
-        for (const arr of arrays) for (const b of (Array.isArray(arr) ? arr : [])) {
-          if (b && !seen.has(b.id)) { seen.add(b.id); briefs.push(b); }
+        for (const loc of locs) {
+          const arrays = await Promise.all(
+            forms.map((f) => get(`https://api.tcgdex.net/v2/${loc}/cards?localId=eq:${encodeURIComponent(f)}`).catch(() => []))
+          );
+          for (const arr of arrays) for (const b of (Array.isArray(arr) ? arr : [])) {
+            if (b && !seen.has(b.id)) { seen.add(b.id); b._loc = loc; briefs.push(b); }
+          }
         }
       }
     } else {
-      const locales = locale === 'en' ? ['en'] : [locale, 'en'];
+      // Pro Sprach-Datenbank mit dem passenden Namen suchen. Japanisch wird
+      // IMMER mit abgefragt (übersetzt über die Namenstabelle), damit
+      // japanische Karten nicht fehlen -- und umgekehrt liefert eine
+      // japanische Eingabe auch die internationalen Karten.
+      const variants = await pokeNameVariants(q).catch(() => null);
+      const cjk = hasCJK(q);
+      const queries = new Map(); // locale -> Set von Suchbegriffen
+      const addQ = (loc, term) => {
+        if (!loc || !term) return;
+        if (!queries.has(loc)) queries.set(loc, new Set());
+        queries.get(loc).add(term);
+      };
+      if (!cjk || locale === 'ja') addQ(locale, q);
+      if (variants && variants[locale]) addQ(locale, variants[locale]);
+      if (!cjk) addQ('en', q);                              // Original-Eingabe (auch Teilbegriffe)
+      if (variants && variants.en) addQ('en', variants.en); // Übersetzung (z. B. Glurak -> Charizard)
+      if (cjk) addQ('ja', q);
+      if (variants && variants.ja) addQ('ja', variants.ja);
+      const pairs = [];
+      for (const [loc, terms] of queries) for (const term of terms) pairs.push([loc, term]);
       const arrays = await Promise.all(
-        locales.map((loc) => get(`https://api.tcgdex.net/v2/${loc}/cards?name=${encodeURIComponent(q)}`).catch(() => []))
+        pairs.map(([loc, term]) => get(`https://api.tcgdex.net/v2/${loc}/cards?name=${encodeURIComponent(term)}`).catch(() => []))
       );
       const seen = new Set();
-      for (const arr of arrays) for (const b of (Array.isArray(arr) ? arr : [])) {
-        if (b && !seen.has(b.id)) { seen.add(b.id); briefs.push(b); }
-      }
+      arrays.forEach((arr, i) => {
+        const loc = pairs[i][0];
+        for (const b of (Array.isArray(arr) ? arr : [])) {
+          if (b && !seen.has(b.id)) { seen.add(b.id); b._loc = loc; briefs.push(b); }
+        }
+      });
     }
     let cards = briefs.slice(0, POKEMON_MAX).map((b) => ({
-      game: 'pokemon', externalId: b.id, name: b.name, lang: locale,
+      game: 'pokemon', externalId: b.id, name: b.name, lang: b._loc || locale,
       setName: null, setCode: pokeSetCode(b.id, b.localId),
       number: b.localId != null ? String(b.localId) : null,
       rarity: null, imageUrl: b.image ? `${b.image}/low.webp` : null,
@@ -186,25 +268,64 @@
     return cards;
   }
 
+  // Preis aus einem TCGdex-Kartendetail ziehen. Reihenfolge:
+  // 1) Cardmarket-Durchschnitt -- auch die Holo-Felder ("avg30-holo" usw.),
+  //    denn viele Karten haben NUR diese gefüllt.
+  // 2) Falls Cardmarket gar nichts hat: TCGplayer-Marktpreis in USD
+  //    (die Währung wird mitgeliefert und in der App pro Karte gespeichert).
+  const TP_VARIANTS = ['holofoil', 'normal', 'reverseHolofoil', '1stEditionHolofoil', '1stEditionNormal', 'unlimitedHolofoil', 'unlimited'];
+  function pokePricing(c) {
+    const cm = (c && c.pricing && c.pricing.cardmarket) || null;
+    const pick = (...vals) => { for (const v of vals) { const n = posOrNull(v); if (n != null) return n; } return null; };
+    let price = cm ? pick(cm['avg30'], cm['avg30-holo'], cm.trend, cm['trend-holo'], cm.avg, cm['avg-holo']) : null;
+    let low = cm ? pick(cm.low, cm['low-holo']) : null;
+    let trend = cm ? pick(cm.trend, cm['trend-holo']) : null;
+    let currency = 'EUR';
+    if (price == null) {
+      const tp = (c && c.pricing && c.pricing.tcgplayer) || null;
+      if (tp && typeof tp === 'object') {
+        const keys = [...new Set([...TP_VARIANTS, ...Object.keys(tp)])];
+        for (const k of keys) {
+          const v = tp[k];
+          if (!v || typeof v !== 'object') continue;
+          const p = pick(v.marketPrice, v.midPrice, v.directLowPrice);
+          if (p != null) { price = p; low = pick(v.lowPrice); trend = null; currency = 'USD'; break; }
+        }
+      }
+    }
+    return { price, low, trend, currency };
+  }
+
+  // Kartendetail laden -- mit Sprach-Fallback: Karten aus rein englischen oder
+  // japanischen Sets existieren in der de-Datenbank nicht (404). Deshalb wird
+  // nacheinander die gewünschte Sprache, dann Englisch, dann Japanisch probiert.
+  async function getPokeCard(id, locale) {
+    const locs = [...new Set([locale, 'en', 'ja'])];
+    for (const loc of locs) {
+      try { return await get(`https://api.tcgdex.net/v2/${loc}/cards/${encodeURIComponent(id)}`); } catch {}
+    }
+    return null;
+  }
+
   async function enrichPokemon(ids, opts) {
     const lang = (opts && opts.lang) || 'de';
     const locale = langFor('pokemon', lang);
     const result = {};
     await mapLimit(ids.slice(0, POKEMON_MAX), POKEMON_CONCURRENCY, async (id) => {
-      try {
-        const c = await get(`https://api.tcgdex.net/v2/${locale}/cards/${id}`);
-        const cm = c.pricing && c.pricing.cardmarket;
-        result[id] = {
-          name: c.name ?? null,
-          setName: (c.set && c.set.name) ?? null,
-          setCode: (c.set && c.set.id) ? String(c.set.id).toUpperCase() : pokeSetCode(id, c.localId),
-          rarity: c.rarity ?? null,
-          cardmarketPrice: num(cm && cm['avg30']) ?? num(cm && cm.trend) ?? num(cm && cm.avg),
-          priceLow: num(cm && cm.low),
-          priceTrend: num(cm && cm.trend),
-          extra: { category: c.category ?? null, hp: c.hp ?? null, types: c.types ?? null, stage: c.stage ?? null },
-        };
-      } catch { result[id] = { needsDetail: false }; }
+      const c = await getPokeCard(id, locale);
+      if (!c) { result[id] = { needsDetail: false }; return; }
+      const p = pokePricing(c);
+      result[id] = {
+        name: c.name ?? null,
+        setName: (c.set && c.set.name) ?? null,
+        setCode: (c.set && c.set.id) ? String(c.set.id).toUpperCase() : pokeSetCode(id, c.localId),
+        rarity: c.rarity ?? null,
+        cardmarketPrice: p.price,
+        priceLow: p.low,
+        priceTrend: p.trend,
+        currency: p.currency,
+        extra: { category: c.category ?? null, hp: c.hp ?? null, types: c.types ?? null, stage: c.stage ?? null },
+      };
     });
     return result;
   }
@@ -236,18 +357,35 @@
     }
     return finishMagic(all);
   }
+  function magicPrice(c) {
+    const pr = (c && c.prices) || {};
+    // EUR bevorzugt (auch Foil, wenn Non-Foil fehlt), sonst USD als Ersatz.
+    let price = posOrNull(pr.eur) ?? posOrNull(pr.eur_foil), currency = 'EUR';
+    if (price == null) { const u = posOrNull(pr.usd) ?? posOrNull(pr.usd_foil); if (u != null) { price = u; currency = 'USD'; } }
+    return { price, currency };
+  }
   function finishMagic(all) {
-    return all.slice(0, SAFETY_MAX).map((c) => ({
-      game: 'magic', externalId: c.id, name: c.printed_name || c.name,
-      setName: c.set_name ?? null, setCode: c.set ? String(c.set).toUpperCase() : null,
-      number: c.collector_number ?? null, rarity: c.rarity ?? null,
-      imageUrl: (c.image_uris && c.image_uris.normal) ?? (c.card_faces && c.card_faces[0] && c.card_faces[0].image_uris && c.card_faces[0].image_uris.normal) ?? null,
-      cardmarketPrice: num(c.prices && c.prices.eur), priceLow: null, priceTrend: null, currency: 'EUR', cardmarketUrl: (c.purchase_uris && c.purchase_uris.cardmarket) ?? null,
-      extra: { typeLine: c.printed_type_line || c.type_line || null, manaCost: c.mana_cost ?? null, colors: c.colors ?? null },
-    }));
+    return all.slice(0, SAFETY_MAX).map((c) => {
+      const mp = magicPrice(c);
+      return {
+        game: 'magic', externalId: c.id, name: c.printed_name || c.name,
+        setName: c.set_name ?? null, setCode: c.set ? String(c.set).toUpperCase() : null,
+        number: c.collector_number ?? null, rarity: c.rarity ?? null,
+        imageUrl: (c.image_uris && c.image_uris.normal) ?? (c.card_faces && c.card_faces[0] && c.card_faces[0].image_uris && c.card_faces[0].image_uris.normal) ?? null,
+        cardmarketPrice: mp.price, priceLow: null, priceTrend: null, currency: mp.currency, cardmarketUrl: (c.purchase_uris && c.purchase_uris.cardmarket) ?? null,
+        extra: { typeLine: c.printed_type_line || c.type_line || null, manaCost: c.mana_cost ?? null, colors: c.colors ?? null },
+      };
+    });
   }
 
   // --- Yu-Gi-Oh: YGOPRODeck ---------------------------------------------------
+  function ygoPrice(c) {
+    const cp = (c && c.card_prices && c.card_prices[0]) || {};
+    // Cardmarket bevorzugt; "0.00" heißt "kein Preis" -> TCGplayer (USD) als Ersatz.
+    let price = posOrNull(cp.cardmarket_price), currency = 'EUR';
+    if (price == null) { const u = posOrNull(cp.tcgplayer_price); if (u != null) { price = u; currency = 'USD'; } }
+    return { price, currency };
+  }
   async function searchYugioh(q, opts) {
     const lang = (opts && opts.lang) || 'de';
     const code = langFor('yugioh', lang);
@@ -259,16 +397,19 @@
       if (String(e.message).includes('400')) return [];
       throw e;
     }
-    return (data.data || []).slice(0, SAFETY_MAX).map((c) => ({
-      game: 'yugioh', externalId: String(c.id), name: c.name,
-      setName: (c.card_sets && c.card_sets[0] && c.card_sets[0].set_name) ?? null,
-      setCode: (c.card_sets && c.card_sets[0] && c.card_sets[0].set_code) ?? null,
-      number: (c.card_sets && c.card_sets[0] && c.card_sets[0].set_code) ?? null,
-      rarity: (c.card_sets && c.card_sets[0] && c.card_sets[0].set_rarity) ?? c.type ?? null,
-      imageUrl: (c.card_images && c.card_images[0] && (c.card_images[0].image_url_small || c.card_images[0].image_url)) ?? null,
-      cardmarketPrice: num(c.card_prices && c.card_prices[0] && c.card_prices[0].cardmarket_price), priceLow: null, priceTrend: null, currency: 'EUR', cardmarketUrl: cmSearchUrl('yugioh', c.name),
-      extra: { type: c.type ?? null, atk: c.atk ?? null, def: c.def ?? null, level: c.level ?? null, attribute: c.attribute ?? null, race: c.race ?? null },
-    }));
+    return (data.data || []).slice(0, SAFETY_MAX).map((c) => {
+      const yp = ygoPrice(c);
+      return {
+        game: 'yugioh', externalId: String(c.id), name: c.name,
+        setName: (c.card_sets && c.card_sets[0] && c.card_sets[0].set_name) ?? null,
+        setCode: (c.card_sets && c.card_sets[0] && c.card_sets[0].set_code) ?? null,
+        number: (c.card_sets && c.card_sets[0] && c.card_sets[0].set_code) ?? null,
+        rarity: (c.card_sets && c.card_sets[0] && c.card_sets[0].set_rarity) ?? c.type ?? null,
+        imageUrl: (c.card_images && c.card_images[0] && (c.card_images[0].image_url_small || c.card_images[0].image_url)) ?? null,
+        cardmarketPrice: yp.price, priceLow: null, priceTrend: null, currency: yp.currency, cardmarketUrl: cmSearchUrl('yugioh', c.name),
+        extra: { type: c.type ?? null, atk: c.atk ?? null, def: c.def ?? null, level: c.level ?? null, attribute: c.attribute ?? null, race: c.race ?? null },
+      };
+    });
   }
 
   // --- One Piece: optcgapi.com -------------------------------------------------
@@ -289,7 +430,7 @@
       game: 'onepiece', externalId: c.card_image_id || c.card_set_id, name: c.card_name,
       setName: c.set_name ?? null, setCode: c.card_set_id ?? null, number: c.card_set_id ?? null,
       rarity: c.rarity ?? null, imageUrl: c.card_image ?? null,
-      cardmarketPrice: num(c.market_price), priceLow: num(c.inventory_price), priceTrend: null,
+      cardmarketPrice: posOrNull(c.market_price), priceLow: posOrNull(c.inventory_price), priceTrend: null,
       currency: 'USD',
       cardmarketUrl: cmSearchUrl('onepiece', c.card_name),
       extra: { type: c.card_type ?? null, color: c.card_color ?? null, cost: c.card_cost ?? null, power: c.card_power ?? null, family: c.sub_types ?? null },
@@ -439,17 +580,25 @@
     try {
       if (game === 'pokemon') {
         const locale = langFor('pokemon', opts.lang);
-        const d = await get(`https://api.tcgdex.net/v2/${locale}/cards/${externalId}`);
-        const cm = d.pricing && d.pricing.cardmarket;
-        return { price: num(cm && cm['avg30']) ?? num(cm && cm.trend) ?? num(cm && cm.avg), low: num(cm && cm.low), trend: num(cm && cm.trend) };
+        const d = await getPokeCard(externalId, locale);
+        if (!d) return { price: null, low: null, trend: null };
+        return pokePricing(d);
       }
-      if (game === 'magic') { const d = await get(`https://api.scryfall.com/cards/${externalId}`); return { price: num(d.prices && d.prices.eur), low: null, trend: null }; }
-      if (game === 'yugioh') { const d = await get(`https://db.ygoprodeck.com/api/v7/cardinfo.php?id=${externalId}`); return { price: num(d.data && d.data[0] && d.data[0].card_prices && d.data[0].card_prices[0] && d.data[0].card_prices[0].cardmarket_price), low: null, trend: null }; }
+      if (game === 'magic') {
+        const d = await get(`https://api.scryfall.com/cards/${externalId}`);
+        const mp = magicPrice(d);
+        return { price: mp.price, low: null, trend: null, currency: mp.currency };
+      }
+      if (game === 'yugioh') {
+        const d = await get(`https://db.ygoprodeck.com/api/v7/cardinfo.php?id=${externalId}`);
+        const yp = ygoPrice(d.data && d.data[0]);
+        return { price: yp.price, low: null, trend: null, currency: yp.currency };
+      }
       if (game === 'onepiece') {
         const baseId = String(externalId).replace(/_p\d+$/, '');
         const arr = await get(`https://optcgapi.com/api/sets/card/${baseId}/`);
         const row = (Array.isArray(arr) ? arr : []).find((c) => (c.card_image_id || c.card_set_id) === externalId) || (arr && arr[0]);
-        return { price: num(row && row.market_price), low: num(row && row.inventory_price), trend: null };
+        return { price: posOrNull(row && row.market_price), low: posOrNull(row && row.inventory_price), trend: null, currency: 'USD' };
       }
     } catch { return { price: null, low: null, trend: null }; }
     return { price: null, low: null, trend: null };

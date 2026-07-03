@@ -19,13 +19,57 @@
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     return bytes;
   }
-  function numOrNull(v) { const n = parseFloat(String(v).replace(',', '.')); return Number.isFinite(n) ? n : null; }
+  function numOrNull(v) {
+    if (v == null || v === '') return null;
+    if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+    let s = String(v).trim();
+    if (!s) return null;
+    // Deutsches Format "1.234,56": Punkt = Tausendertrennzeichen, Komma = Dezimaltrennzeichen.
+    if (s.includes(',') && s.includes('.')) s = s.replace(/\./g, '').replace(',', '.');
+    else if (s.includes(',')) s = s.replace(',', '.');
+    const n = parseFloat(s);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  // Gemeinsame Preis-Aktualisierung fuer Sammlung/Verkauft/Wunschliste: laeuft
+  // Karte fuer Karte durch und bricht NICHT komplett ab, wenn eine einzelne
+  // Preisabfrage fehlschlaegt (z. B. Netzwerk-Hänger oder Rate-Limit) --
+  // stattdessen wird der Fehler gesammelt und der Rest normal weiter aktualisiert.
+  // Patch fuer ein Preis-Update bauen. Wenn die Quelle eine Waehrung mitliefert
+  // (z. B. USD-Ersatzpreis von TCGplayer, weil Cardmarket nichts hat), wird sie
+  // zusammen mit dem Preis gespeichert, damit Preis und Waehrung zusammenpassen.
+  function pricePatch(p) {
+    const patch = { price_current: p.price, price_low: p.low, price_trend: p.trend };
+    if (p.currency && p.price != null) patch.currency = p.currency;
+    return patch;
+  }
+
+  async function refreshPrices(rows, applyUpdate) {
+    let updated = 0;
+    const errors = [];
+    for (const r of rows) {
+      try {
+        const p = await A.fetchPrices(r.game, r.external_id);
+        if (p.price !== null || p.low !== null || p.trend !== null) {
+          await applyUpdate(r.id, p);
+          updated++;
+        }
+      } catch (e) {
+        errors.push({ id: r.id, name: r.name || r.external_id, error: String((e && e.message) || e) });
+      }
+      await new Promise((res) => setTimeout(res, 120));
+    }
+    return { updated, total: rows.length, errors };
+  }
 
   const EXPORT_HEADERS = [
     'Spiel', 'Name', 'Set', 'Set-Code', 'Nummer', 'Seltenheit', 'Anzahl', 'Zustand', 'Sprache',
     'Preis 30T-Schnitt', 'Ab-Preis', 'Preistrend', 'Währung', 'Kaufpreis', 'Kaufdatum', 'Status', 'Verkaufspreis', 'Verkaufsdatum', 'Notiz', 'ExterneID', 'BildURL', 'CardmarketURL',
   ];
 
+  // Wichtig: Bei Routen mit gleicher Segmentanzahl muss die spezifischere
+  // (statische) Route VOR der Route mit Platzhalter (:id) registriert werden,
+  // da der Router die Liste linear durchgeht und die erste Übereinstimmung nimmt.
   const routes = [];
   function route(method, pattern, fn) {
     const keys = [];
@@ -36,7 +80,8 @@
   // --- Meta / Namen -------------------------------------------------------
   route('GET', '/api/meta', async () => ok({ languages: A.LANGUAGES, numberSearch: A.NUMBER_SEARCH }));
   route('GET', '/api/names/onepiece', async () => {
-    try { return ok({ names: await A.onePieceNames() }); } catch { return ok({ names: [] }); }
+    try { return ok({ names: await A.onePieceNames() }); }
+    catch (e) { console.error('onePieceNames fehlgeschlagen:', e); return ok({ names: [] }); }
   });
 
   // --- Suche ----------------------------------------------------------------
@@ -85,17 +130,9 @@
 
   route('POST', '/api/collection/refresh-prices', async () => {
     const rows = await D.allForRefresh();
-    let updated = 0;
-    for (const r of rows) {
-      const p = await A.fetchPrices(r.game, r.external_id);
-      if (p.price !== null || p.low !== null || p.trend !== null) {
-        await D.updateCard(r.id, { price_current: p.price, price_low: p.low, price_trend: p.trend });
-        updated++;
-      }
-      await new Promise((res) => setTimeout(res, 120));
-    }
+    const result = await refreshPrices(rows, (id, p) => D.updateCard(id, pricePatch(p)));
     await D.recordSnapshot();
-    return ok({ updated, total: rows.length });
+    return ok(result);
   });
 
   route('GET', '/api/collection/history', async () => ok({ history: await D.getHistory(), totals: await D.computeTotals() }));
@@ -149,16 +186,8 @@
 
   route('POST', '/api/sold/refresh-prices', async () => {
     const rows = await D.soldForRefresh();
-    let updated = 0;
-    for (const r of rows) {
-      const p = await A.fetchPrices(r.game, r.external_id);
-      if (p.price !== null || p.low !== null || p.trend !== null) {
-        await D.updateCard(r.id, { price_current: p.price, price_low: p.low, price_trend: p.trend });
-        updated++;
-      }
-      await new Promise((res) => setTimeout(res, 120));
-    }
-    return ok({ updated, total: rows.length });
+    const result = await refreshPrices(rows, (id, p) => D.updateCard(id, pricePatch(p)));
+    return ok(result);
   });
 
   // --- Datensicherung ---------------------------------------------------------
@@ -190,16 +219,8 @@
 
   route('POST', '/api/wishlist/refresh-prices', async () => {
     const rows = await D.wishlistForRefresh();
-    let updated = 0;
-    for (const r of rows) {
-      const p = await A.fetchPrices(r.game, r.external_id);
-      if (p.price !== null || p.low !== null || p.trend !== null) {
-        await D.updateWishlist(r.id, { price_current: p.price, price_low: p.low, price_trend: p.trend });
-        updated++;
-      }
-      await new Promise((res) => setTimeout(res, 120));
-    }
-    return ok({ updated, total: rows.length });
+    const result = await refreshPrices(rows, (id, p) => D.updateWishlist(id, pricePatch(p)));
+    return ok(result);
   });
 
   route('POST', '/api/wishlist/:id/to-collection', async ({ params }) => {
@@ -214,7 +235,14 @@
       cardmarketPrice: item.price_current, priceLow: item.price_low, priceTrend: item.price_trend,
       currency: item.currency || 'EUR',
     });
-    await D.deleteWishlist(item.id);
+    try {
+      await D.deleteWishlist(item.id);
+    } catch (e) {
+      // Karte ist schon in der Sammlung, konnte aber nicht von der Wunschliste
+      // entfernt werden -- neu angelegte Karte zurueckrollen, damit sie nicht doppelt ist.
+      try { await D.deleteCard(card.id); } catch {}
+      return bad(502, { error: 'Konnte nicht von der Wunschliste entfernt werden. Bitte erneut versuchen.' });
+    }
     return ok({ ok: true, card });
   });
 
@@ -223,7 +251,7 @@
     const game = String(query.game || 'pokemon');
     if (!A.SUPPORTED_GAMES.includes(game)) return bad(400, { error: 'Spiel unbekannt' });
     try { return ok({ sets: await A.searchSets(game, String(query.q || '')) }); }
-    catch (e) { return { status: 500, json: { error: String((e && e.message) || e), sets: [] } }; }
+    catch (e) { return bad(500, { error: String((e && e.message) || e), sets: [] }); }
   });
 
   // --- Versiegelte Ware ---------------------------------------------------------
@@ -314,7 +342,7 @@
         const price = numOrNull(r['Preis 30T-Schnitt']);
         await D.addCard({
           game, name: String(name),
-          externalId: r['ExterneID'] ? String(r['ExterneID']) : `import-${Date.now()}-${i}`,
+          externalId: r['ExterneID'] ? String(r['ExterneID']) : `import-${(self.crypto && self.crypto.randomUUID) ? self.crypto.randomUUID() : (Date.now() + '-' + i)}`,
           setName: r['Set'] ?? null, setCode: r['Set-Code'] ?? null,
           number: r['Nummer'] != null ? String(r['Nummer']) : null,
           rarity: r['Seltenheit'] ?? null,
@@ -334,8 +362,15 @@
   });
 
   // --- Einstellungen (z. B. PokemonPriceTracker-Key fuers Graded-Modul) --------
-  route('GET', '/api/settings/:key', async ({ params }) => ok({ value: await D.getSetting(params.key) }));
+  // Allowlist statt beliebiger Keys: verhindert, dass ueber diese generische Route
+  // versehentlich andere/zukuenftige Settings ausgelesen werden koennten.
+  const SETTINGS_ALLOWLIST = ['pokepriceApiKey'];
+  route('GET', '/api/settings/:key', async ({ params }) => {
+    if (!SETTINGS_ALLOWLIST.includes(params.key)) return bad(404, { error: 'Unbekannter Einstellungs-Schlüssel' });
+    return ok({ value: await D.getSetting(params.key) });
+  });
   route('POST', '/api/settings/:key', async ({ params, body }) => {
+    if (!SETTINGS_ALLOWLIST.includes(params.key)) return bad(404, { error: 'Unbekannter Einstellungs-Schlüssel' });
     await D.setSetting(params.key, (body && body.value) != null ? body.value : null);
     return ok({ ok: true });
   });

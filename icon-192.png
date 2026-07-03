@@ -93,7 +93,7 @@
 
   async function updateCard(id, fields) {
     const allowed = ['quantity', 'condition', 'language', 'notes', 'price_current', 'price_low', 'price_trend',
-      'purchase_price', 'purchase_date', 'status', 'sold_price', 'sold_date'];
+      'currency', 'purchase_price', 'purchase_date', 'status', 'sold_price', 'sold_date'];
     const patch = {};
     for (const k of allowed) if (fields[k] !== undefined) patch[k] = fields[k];
     if (!Object.keys(patch).length) {
@@ -116,7 +116,7 @@
   }
 
   async function allForRefresh() {
-    return must(await getClient().from('cards').select('id, game, external_id').eq('status', 'owned'));
+    return must(await getClient().from('cards').select('id, game, external_id, name').eq('status', 'owned'));
   }
 
   // --- Verkaufte Karten -------------------------------------------------------
@@ -125,7 +125,7 @@
       .order('sold_date', { ascending: false, nullsFirst: false }));
   }
   async function soldForRefresh() {
-    return must(await getClient().from('cards').select('id, game, external_id').eq('status', 'sold'));
+    return must(await getClient().from('cards').select('id, game, external_id, name').eq('status', 'sold'));
   }
   async function soldTotals() {
     const rows = must(await getClient().from('cards')
@@ -353,7 +353,7 @@
     return must(await getClient().from('wishlist').insert(row).select().single());
   }
   async function updateWishlist(id, fields) {
-    const allowed = ['quantity', 'language', 'notes', 'price_current', 'price_low', 'price_trend', 'target_price'];
+    const allowed = ['quantity', 'language', 'notes', 'price_current', 'price_low', 'price_trend', 'currency', 'target_price'];
     const patch = {};
     for (const k of allowed) if (fields[k] !== undefined) patch[k] = fields[k];
     if (!Object.keys(patch).length) return must(await getClient().from('wishlist').select('*').eq('id', id).maybeSingle());
@@ -366,7 +366,7 @@
     return (count || 0) > 0;
   }
   async function wishlistForRefresh() {
-    return must(await getClient().from('wishlist').select('id, game, external_id'));
+    return must(await getClient().from('wishlist').select('id, game, external_id, name'));
   }
   async function wishlistTotals() {
     const rows = must(await getClient().from('wishlist').select('quantity, price_current, currency'));
