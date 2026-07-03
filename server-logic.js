@@ -1,0 +1,368 @@
+// server-logic.js – "Routen"-Logik, portiert aus server.js. Läuft im Service
+// Worker und ersetzt Express: statt app.get(...)/app.post(...) gibt es eine
+// kleine eigene Routenliste. self.DB und self.Adapters müssen vorher geladen sein
+// (importScripts in sw.js).
+
+(function () {
+  'use strict';
+
+  const D = self.DB;
+  const A = self.Adapters;
+
+  function ok(json, status) { return { status: status || 200, json }; }
+  function bad(status, json) { return { status, json }; }
+
+  function b64ToBytes(b64) {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+  function numOrNull(v) { const n = parseFloat(String(v).replace(',', '.')); return Number.isFinite(n) ? n : null; }
+
+  const EXPORT_HEADERS = [
+    'Spiel', 'Name', 'Set', 'Set-Code', 'Nummer', 'Seltenheit', 'Anzahl', 'Zustand', 'Sprache',
+    'Preis 30T-Schnitt', 'Ab-Preis', 'Preistrend', 'Währung', 'Kaufpreis', 'Kaufdatum', 'Status', 'Verkaufspreis', 'Verkaufsdatum', 'Notiz', 'ExterneID', 'BildURL', 'CardmarketURL',
+  ];
+
+  const routes = [];
+  function route(method, pattern, fn) {
+    const keys = [];
+    const re = new RegExp('^' + pattern.replace(/:[^/]+/g, (m) => { keys.push(m.slice(1)); return '([^/]+)'; }) + '$');
+    routes.push({ method, re, keys, fn });
+  }
+
+  // --- Meta / Namen -------------------------------------------------------
+  route('GET', '/api/meta', async () => ok({ languages: A.LANGUAGES, numberSearch: A.NUMBER_SEARCH }));
+  route('GET', '/api/names/onepiece', async () => {
+    try { return ok({ names: await A.onePieceNames() }); } catch { return ok({ names: [] }); }
+  });
+
+  // --- Suche ----------------------------------------------------------------
+  route('GET', '/api/search', async ({ query }) => {
+    const { game, q, lang, mode } = query;
+    if (!game || !q) return bad(400, { error: 'game und q sind erforderlich' });
+    if (!A.SUPPORTED_GAMES.includes(game)) return bad(400, { error: `Spiel "${game}" wird nicht unterstützt` });
+    try {
+      const results = await A.search(game, String(q), { lang: String(lang || ''), mode: mode === 'number' ? 'number' : 'name' });
+      return ok({ results });
+    } catch (e) {
+      if (e.code === 'NO_KEY') return bad(400, { error: e.message });
+      return bad(502, { error: 'Quell-API nicht erreichbar', detail: e.message });
+    }
+  });
+
+  route('POST', '/api/enrich', async ({ body }) => {
+    const { game, ids, lang } = body || {};
+    if (game !== 'pokemon') return bad(400, { error: 'enrich derzeit nur für Pokémon' });
+    if (!Array.isArray(ids) || !ids.length) return ok({ details: {} });
+    try {
+      const details = await A.enrichPokemon(ids, { lang: String(lang || '') });
+      return ok({ details });
+    } catch (e) { return bad(502, { error: 'Details konnten nicht geladen werden' }); }
+  });
+
+  // --- Sammlung ---------------------------------------------------------------
+  route('GET', '/api/collection', async () => ok({ cards: D.listCards() }));
+
+  route('POST', '/api/collection', async ({ body }) => {
+    const c = body;
+    if (!c || !c.game || !c.externalId || !c.name) return bad(400, { error: 'game, externalId und name sind erforderlich' });
+    return ok({ card: D.addCard(c) }, 201);
+  });
+
+  route('PATCH', '/api/collection/:id', async ({ params, body }) => {
+    const card = D.updateCard(Number(params.id), body || {});
+    if (!card) return bad(404, { error: 'Nicht gefunden' });
+    return ok({ card });
+  });
+
+  route('DELETE', '/api/collection/:id', async ({ params }) => {
+    const okDel = D.deleteCard(Number(params.id));
+    return { status: okDel ? 204 : 404, json: null };
+  });
+
+  route('POST', '/api/collection/refresh-prices', async () => {
+    const rows = D.allForRefresh();
+    let updated = 0;
+    for (const r of rows) {
+      const p = await A.fetchPrices(r.game, r.external_id);
+      if (p.price !== null || p.low !== null || p.trend !== null) {
+        D.updateCard(r.id, { price_current: p.price, price_low: p.low, price_trend: p.trend });
+        updated++;
+      }
+      await new Promise((res) => setTimeout(res, 120));
+    }
+    D.recordSnapshot();
+    return ok({ updated, total: rows.length });
+  });
+
+  route('GET', '/api/collection/history', async () => ok({ history: D.getHistory(), totals: D.computeTotals() }));
+
+  route('GET', '/api/portfolio', async () => ok({ portfolio: D.computePortfolio(), analysis: D.getAnalysis() }));
+
+  route('GET', '/api/collection/movers', async ({ query }) => {
+    const days = Math.max(1, parseInt(query.days) || 30);
+    return ok({ days, ...D.getMovers(days, 6) });
+  });
+
+  // --- Verkaufte Karten -------------------------------------------------------
+  route('GET', '/api/sold', async () => {
+    const items = [];
+    for (const c of D.listSold()) items.push({
+      source: 'card', id: c.id, name: c.name, image_url: c.image_url, cardmarket_url: c.cardmarket_url,
+      currency: c.currency || 'EUR', quantity: c.quantity,
+      purchase_price: c.purchase_price, sold_price: c.sold_price, sold_date: c.sold_date,
+      current_value: c.price_current ?? c.price_at_add ?? null,
+      game: c.game, set_name: c.set_name, set_code: c.set_code, number: c.number, language: c.language,
+    });
+    for (const s of D.listSealedSold()) items.push({
+      source: 'sealed', id: s.id, name: s.name, image_url: s.image_url, cardmarket_url: s.cardmarket_url,
+      currency: s.currency || 'EUR', quantity: s.quantity,
+      purchase_price: s.purchase_price, sold_price: s.sold_price, sold_date: s.sold_date,
+      current_value: s.current_value,
+      game: s.game, set_name: s.set_name, product_type: s.product_type,
+    });
+    for (const g of D.listGradedSold()) items.push({
+      source: 'graded', id: g.id, name: g.name, image_url: g.image_url, cardmarket_url: null,
+      currency: g.currency || 'USD', quantity: 1,
+      purchase_price: g.purchase_price, sold_price: g.sold_price, sold_date: g.sold_date,
+      current_value: g.value,
+      set_name: g.set_name, number: g.number, company: g.company, grade: g.grade,
+    });
+    items.sort((a, b) => String(b.sold_date || '').localeCompare(String(a.sold_date || '')));
+
+    const acc = () => ({ realized: 0, proceeds: 0, current: 0, invested: 0, count: 0, qty: 0 });
+    const totals = { eur: acc(), usd: acc() };
+    for (const it of items) {
+      const b = it.currency === 'USD' ? totals.usd : totals.eur;
+      const q = it.quantity || 1;
+      b.count += 1; b.qty += q;
+      if (it.sold_price != null) b.proceeds += it.sold_price * q;
+      if (it.sold_price != null && it.purchase_price != null) b.realized += (it.sold_price - it.purchase_price) * q;
+      if (it.purchase_price != null) b.invested += it.purchase_price * q;
+      if (it.current_value != null) b.current += it.current_value * q;
+    }
+    return ok({ items, totals });
+  });
+
+  route('POST', '/api/sold/refresh-prices', async () => {
+    const rows = D.soldForRefresh();
+    let updated = 0;
+    for (const r of rows) {
+      const p = await A.fetchPrices(r.game, r.external_id);
+      if (p.price !== null || p.low !== null || p.trend !== null) {
+        D.updateCard(r.id, { price_current: p.price, price_low: p.low, price_trend: p.trend });
+        updated++;
+      }
+      await new Promise((res) => setTimeout(res, 120));
+    }
+    return ok({ updated, total: rows.length });
+  });
+
+  // --- Datensicherung ---------------------------------------------------------
+  route('POST', '/api/backup', async () => ok(await D.backupDatabase()));
+  route('GET', '/api/backups', async () => ok({ backups: await D.listBackups() }));
+
+  route('GET', '/api/data/export', async () => ({
+    status: 200, json: D.exportAll(),
+    headers: { 'Content-Disposition': `attachment; filename="tiny-tokyo-backup-${new Date().toISOString().slice(0, 10)}.json"` },
+  }));
+  route('POST', '/api/data/import', async ({ body }) => {
+    try {
+      await D.backupDatabase();
+      const counts = await D.importAll(body && body.data);
+      return ok({ ok: true, counts });
+    } catch (e) { return bad(400, { ok: false, error: String((e && e.message) || e) }); }
+  });
+
+  route('GET', '/api/collection/:id/history', async ({ params }) => ok({ history: D.getCardHistory(Number(params.id)) }));
+
+  // --- Wunschliste ------------------------------------------------------------
+  route('GET', '/api/wishlist', async () => ok({ items: D.listWishlist(), totals: D.wishlistTotals() }));
+  route('POST', '/api/wishlist', async ({ body }) => {
+    const c = body || {};
+    if (!c.game || !c.externalId || !c.name) return bad(400, { error: 'game, externalId, name nötig' });
+    return ok(D.addWishlist(c));
+  });
+  route('PATCH', '/api/wishlist/:id', async ({ params, body }) => ok(D.updateWishlist(Number(params.id), body || {})));
+  route('DELETE', '/api/wishlist/:id', async ({ params }) => ok({ ok: D.deleteWishlist(Number(params.id)) }));
+
+  route('POST', '/api/wishlist/refresh-prices', async () => {
+    const rows = D.wishlistForRefresh();
+    let updated = 0;
+    for (const r of rows) {
+      const p = await A.fetchPrices(r.game, r.external_id);
+      if (p.price !== null || p.low !== null || p.trend !== null) {
+        D.updateWishlist(r.id, { price_current: p.price, price_low: p.low, price_trend: p.trend });
+        updated++;
+      }
+      await new Promise((res) => setTimeout(res, 120));
+    }
+    return ok({ updated, total: rows.length });
+  });
+
+  route('POST', '/api/wishlist/:id/to-collection', async ({ params }) => {
+    const item = D.listWishlist().find((w) => w.id === Number(params.id));
+    if (!item) return bad(404, { error: 'nicht gefunden' });
+    const card = D.addCard({
+      game: item.game, externalId: item.external_id, name: item.name,
+      setName: item.set_name, setCode: item.set_code, number: item.number, rarity: item.rarity,
+      imageUrl: item.image_url, cardmarketUrl: item.cardmarket_url,
+      quantity: item.quantity || 1, condition: 'NM', language: item.language || 'DE',
+      cardmarketPrice: item.price_current, priceLow: item.price_low, priceTrend: item.price_trend,
+      currency: item.currency || 'EUR',
+    });
+    D.deleteWishlist(item.id);
+    return ok({ ok: true, card });
+  });
+
+  // --- Set-Suche ----------------------------------------------------------------
+  route('GET', '/api/sets', async ({ query }) => {
+    const game = String(query.game || 'pokemon');
+    if (!A.SUPPORTED_GAMES.includes(game)) return bad(400, { error: 'Spiel unbekannt' });
+    try { return ok({ sets: await A.searchSets(game, String(query.q || '')) }); }
+    catch (e) { return { status: 500, json: { error: String((e && e.message) || e), sets: [] } }; }
+  });
+
+  // --- Versiegelte Ware ---------------------------------------------------------
+  route('GET', '/api/sealed', async () => ok({ items: D.listSealed(), totals: D.sealedTotals() }));
+  route('POST', '/api/sealed', async ({ body }) => {
+    const c = body || {};
+    if (!c.game || !c.name || !c.productType) return bad(400, { error: 'game, name, productType nötig' });
+    return ok(D.addSealed(c));
+  });
+  route('PATCH', '/api/sealed/:id', async ({ params, body }) => ok(D.updateSealed(Number(params.id), body || {})));
+  route('DELETE', '/api/sealed/:id', async ({ params }) => ok({ ok: D.deleteSealed(Number(params.id)) }));
+
+  route('POST', '/api/collection/snapshot', async () => { D.recordSnapshot(); return ok({ totals: D.computeTotals() }); });
+
+  route('GET', '/api/collection/history/export', async () => {
+    const rows = D.getHistory().map((h) => ({
+      'Datum': h.day, 'Wert 30T-Schnitt': h.total, 'Ab-Wert': h.total_low, 'Preistrend': h.total_trend,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows, { header: ['Datum', 'Wert 30T-Schnitt', 'Ab-Wert', 'Preistrend'] });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Wertverlauf');
+    const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    return {
+      status: 200, buffer: buf, contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      headers: { 'Content-Disposition': 'attachment; filename="tcg-wertverlauf.xlsx"' },
+    };
+  });
+
+  // --- Gegradete Karten -----------------------------------------------------
+  route('GET', '/api/graded/search', async ({ query }) => {
+    const q = query.q;
+    if (!q) return bad(400, { error: 'q ist erforderlich' });
+    try { return ok({ results: await A.searchGraded(String(q)) }); }
+    catch (e) {
+      if (e.code === 'NO_KEY') return bad(400, { error: e.message });
+      return bad(502, { error: 'Graded-Quelle nicht erreichbar', detail: e.message });
+    }
+  });
+  route('GET', '/api/graded', async () => ok({ cards: D.listGraded() }));
+  route('POST', '/api/graded', async ({ body }) => {
+    const c = body;
+    if (!c || !c.name || !c.company || c.grade == null) return bad(400, { error: 'name, company und grade sind erforderlich' });
+    return ok({ card: D.addGraded(c) }, 201);
+  });
+  route('PATCH', '/api/graded/:id', async ({ params, body }) => {
+    const card = D.updateGraded(Number(params.id), body);
+    if (!card) return bad(404, { error: 'Nicht gefunden' });
+    return ok({ card });
+  });
+  route('DELETE', '/api/graded/:id', async ({ params }) => ({ status: D.deleteGraded(Number(params.id)) ? 204 : 404, json: null }));
+
+  // --- Excel-Export/-Import ------------------------------------------------------
+  route('GET', '/api/collection/export', async () => {
+    const rows = D.listCards().map((c) => ({
+      'Spiel': c.game, 'Name': c.name, 'Set': c.set_name, 'Set-Code': c.set_code, 'Nummer': c.number,
+      'Seltenheit': c.rarity, 'Anzahl': c.quantity, 'Zustand': c.condition, 'Sprache': c.language,
+      'Preis 30T-Schnitt': c.price_current ?? c.price_at_add, 'Ab-Preis': c.price_low, 'Preistrend': c.price_trend,
+      'Währung': c.currency || 'EUR',
+      'Kaufpreis': c.purchase_price, 'Kaufdatum': c.purchase_date, 'Status': c.status || 'owned',
+      'Verkaufspreis': c.sold_price, 'Verkaufsdatum': c.sold_date,
+      'Notiz': c.notes, 'ExterneID': c.external_id, 'BildURL': c.image_url, 'CardmarketURL': c.cardmarket_url,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows, { header: EXPORT_HEADERS });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sammlung');
+    const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    return {
+      status: 200, buffer: buf, contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      headers: { 'Content-Disposition': 'attachment; filename="tcg-sammlung.xlsx"' },
+    };
+  });
+
+  route('POST', '/api/collection/import', async ({ body }) => {
+    try {
+      const b64 = ((body && body.data) || '').split(',').pop();
+      const bytes = b64ToBytes(b64);
+      const wb = XLSX.read(bytes, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: null });
+      let added = 0, skipped = 0;
+      rows.forEach((r, i) => {
+        const game = String(r['Spiel'] || '').toLowerCase().trim();
+        const name = r['Name'];
+        if (!A.SUPPORTED_GAMES.includes(game) || !name) { skipped++; return; }
+        const price = numOrNull(r['Preis 30T-Schnitt']);
+        D.addCard({
+          game, name: String(name),
+          externalId: r['ExterneID'] ? String(r['ExterneID']) : `import-${Date.now()}-${i}`,
+          setName: r['Set'] ?? null, setCode: r['Set-Code'] ?? null,
+          number: r['Nummer'] != null ? String(r['Nummer']) : null,
+          rarity: r['Seltenheit'] ?? null,
+          imageUrl: r['BildURL'] ?? null, cardmarketUrl: r['CardmarketURL'] ?? null,
+          quantity: Math.max(1, parseInt(r['Anzahl']) || 1),
+          condition: r['Zustand'] ?? 'NM', language: r['Sprache'] ?? 'DE', notes: r['Notiz'] ?? null,
+          cardmarketPrice: price, priceLow: numOrNull(r['Ab-Preis']), priceTrend: numOrNull(r['Preistrend']),
+          currency: (String(r['Währung'] || 'EUR').toUpperCase() === 'USD') ? 'USD' : 'EUR',
+          purchasePrice: numOrNull(r['Kaufpreis']), purchaseDate: r['Kaufdatum'] ? String(r['Kaufdatum']) : null,
+        });
+        added++;
+      });
+      return ok({ added, skipped });
+    } catch (e) {
+      return bad(400, { error: 'Datei konnte nicht gelesen werden. Bitte eine .xlsx im Export-Format verwenden.' });
+    }
+  });
+
+  // --- Einstellungen (z. B. PokemonPriceTracker-Key fuers Graded-Modul) --------
+  route('GET', '/api/settings/:key', async ({ params }) => ok({ value: await D.getSetting(params.key) }));
+  route('POST', '/api/settings/:key', async ({ params, body }) => {
+    await D.setSetting(params.key, (body && body.value) != null ? body.value : null);
+    return ok({ ok: true });
+  });
+
+  // --- Dispatcher -------------------------------------------------------------
+  async function handle(request) {
+    const url = new URL(request.url);
+    const method = request.method;
+    // Wenn die App nicht an der Domain-Wurzel liegt (z. B. GitHub Pages unter
+    // "/reponame/"), enthaelt der Pfad einen Praefix. Wir matchen deshalb ab
+    // dem ersten "/api/" -> funktioniert unabhaengig vom Hosting-Unterordner.
+    const apiIdx = url.pathname.indexOf('/api/');
+    if (apiIdx === -1) return null;
+    const apiPath = url.pathname.slice(apiIdx);
+    for (const r of routes) {
+      if (r.method !== method) continue;
+      const m = r.re.exec(apiPath);
+      if (!m) continue;
+      const params = {};
+      r.keys.forEach((k, i) => { params[k] = decodeURIComponent(m[i + 1]); });
+      const query = {};
+      url.searchParams.forEach((v, k) => { query[k] = v; });
+      let body = null;
+      if (method === 'POST' || method === 'PATCH' || method === 'PUT') {
+        try { body = await request.json(); } catch { body = null; }
+      }
+      try { return await r.fn({ params, query, body }); }
+      catch (e) { return { status: 500, json: { error: String((e && e.message) || e) } }; }
+    }
+    return null;
+  }
+
+  self.ServerLogic = { handle };
+})();
