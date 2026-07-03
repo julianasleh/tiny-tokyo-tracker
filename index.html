@@ -376,6 +376,7 @@
     <div class="filterbar row" id="search-filters" style="display:none">
       <span><label>Set</label><select id="f-set"><option value="">alle</option></select></span>
       <span><label>Seltenheit</label><select id="f-rarity"><option value="">alle</option></select></span>
+      <span id="f-lang-wrap"><label>Sprache</label><select id="f-lang"><option value="">alle</option></select></span>
       <span><label>Sortieren</label>
         <select id="f-sort">
           <option value="relevance">Relevanz</option>
@@ -1281,17 +1282,27 @@ async function enrichPending(token, lang) {
 }
 
 function buildFilters(cards) {
+  const setSel = document.getElementById('f-set'), rarSel = document.getElementById('f-rarity'), langSel = document.getElementById('f-lang');
+  const prevSet = setSel.value, prevRar = rarSel.value, prevLang = langSel.value;
   const sets = [...new Set(cards.map(c=>c.setName).filter(Boolean))].sort();
-  document.getElementById('f-set').innerHTML = '<option value="">alle</option>' + sets.map(s=>`<option>${escapeHtml(s)}</option>`).join('');
+  setSel.innerHTML = '<option value="">alle</option>' + sets.map(s=>`<option>${escapeHtml(s)}</option>`).join('');
+  if (sets.includes(prevSet)) setSel.value = prevSet;
   const rar = [...new Set(cards.map(c=>c.rarity).filter(Boolean))].sort();
-  document.getElementById('f-rarity').innerHTML = '<option value="">alle</option>' + rar.map(r=>`<option>${escapeHtml(r)}</option>`).join('');
+  rarSel.innerHTML = '<option value="">alle</option>' + rar.map(r=>`<option>${escapeHtml(r)}</option>`).join('');
+  if (rar.includes(prevRar)) rarSel.value = prevRar;
+  // Sprache der Fundstelle (nur zeigen, wenn es mehr als eine gibt)
+  const langs = [...new Set(cards.map(c=>c.lang).filter(Boolean))];
+  langSel.innerHTML = '<option value="">alle</option>' + langs.map(l=>`<option value="${l}">${flagFor(l)} ${langLabel(l)}</option>`).join('');
+  if (langs.includes(prevLang)) langSel.value = prevLang;
+  document.getElementById('f-lang-wrap').style.display = langs.length > 1 ? '' : 'none';
 }
 
 function applySearchFilters() {
   const set = document.getElementById('f-set').value;
   const rarity = document.getElementById('f-rarity').value;
+  const langF = document.getElementById('f-lang').value;
   const sort = document.getElementById('f-sort').value;
-  let list = lastResults.filter(c => !set || c.setName===set).filter(c => !rarity || c.rarity===rarity);
+  let list = lastResults.filter(c => !set || c.setName===set).filter(c => !rarity || c.rarity===rarity).filter(c => !langF || c.lang===langF);
   const price = c => c.cardmarketPrice ?? -1;
   const numOf = c => parseInt(String(c.number).replace(/\D/g,'')) || 0;
   if (sort==='price-desc') list = [...list].sort((a,b)=>price(b)-price(a));
@@ -2143,6 +2154,7 @@ document.getElementById('ac-list').addEventListener('mousedown', e=>{
 document.addEventListener('click', e=>{ if(!e.target.closest('.ac-wrap')) hideAuto(); });
 document.getElementById('f-set').addEventListener('change', applySearchFilters);
 document.getElementById('f-rarity').addEventListener('change', applySearchFilters);
+document.getElementById('f-lang').addEventListener('change', applySearchFilters);
 document.getElementById('f-sort').addEventListener('change', applySearchFilters);
 document.getElementById('view-toggle').addEventListener('click', e=>{
   const b = e.target.closest('.chip'); if(!b) return;

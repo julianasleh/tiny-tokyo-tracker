@@ -136,27 +136,50 @@
     if (!pokeI18n || !Array.isArray(pokeI18n.langs) || !Array.isArray(pokeI18n.rows)) pokeI18n = { langs: [], rows: [] };
     return pokeI18n;
   }
-  // Liefert { de:'Pikachu', ja:'ピカチュウ', ... } zum Suchbegriff (bester Treffer:
-  // exakt > Wortanfang > enthalten) oder null, wenn kein Pokémon passt.
-  async function pokeNameVariants(q) {
+  // Erkennt das Pokémon im Suchbegriff und liefert pro Sprache passende
+  // Suchbegriffe. Wichtig: Zusätze bleiben erhalten -- "ピカチュウex" wird zu
+  // "Pikachu ex" übersetzt (und NICHT zu einem nackten "Pikachu", das alle
+  // Pikachu-Karten fluten würde). Modi:
+  //   exact    -- Eingabe ist genau ein Pokémon-Name -> Name pro Sprache
+  //   suffix   -- Eingabe enthält einen Pokémon-Namen + Zusatz -> Zusatz mitnehmen
+  //   partial  -- Eingabe ist ein Namensanfang/-teil -> voller Name pro Sprache
+  async function pokeQueryPlan(q) {
     const data = await loadPokeI18n();
-    const t = String(q || '').trim().toLowerCase();
+    const raw = String(q || '').trim();
+    const t = raw.toLowerCase();
     if (!t || !data.rows.length) return null;
-    let best = null, bestScore = 0;
+    let best = null; // { row, name, mode }
     for (const row of data.rows) {
       for (const n of row) {
         if (!n) continue;
         const ln = n.toLowerCase();
-        const score = ln === t ? 3 : ln.startsWith(t) ? 2 : ln.includes(t) ? 1 : 0;
-        if (score > bestScore) { bestScore = score; best = row; }
-        if (bestScore === 3) break;
+        if (ln === t) { best = { row, name: n, mode: 'exact' }; break; }
+        if (t.includes(ln)) {
+          if (!best || best.mode === 'partial' || (best.mode === 'suffix' && n.length > best.name.length)) best = { row, name: n, mode: 'suffix' };
+        } else if (ln.includes(t)) {
+          if (!best) best = { row, name: n, mode: 'partial' };
+        }
       }
-      if (bestScore === 3) break;
+      if (best && best.mode === 'exact') break;
     }
     if (!best) return null;
-    const map = {};
-    data.langs.forEach((lg, i) => { if (best[i]) map[lg] = best[i]; });
-    return map;
+    const idx = {};
+    data.langs.forEach((lg, i) => { idx[lg] = i; });
+    const nameFor = (lg) => { const i = idx[lg]; return i == null ? null : (best.row[i] || null); };
+    if (best.mode === 'suffix') {
+      const pos = t.indexOf(best.name.toLowerCase());
+      const before = raw.slice(0, pos), after = raw.slice(pos + best.name.length);
+      return { mode: 'suffix', terms(lg) {
+        const n = nameFor(lg); if (!n) return [];
+        const t1 = (before + n + after).trim();
+        const t2 = ((before ? before.trim() + ' ' : '') + n + (after ? ' ' + after.trim() : '')).trim();
+        // Variante ohne Leerzeichen: japanische/chinesische Namen kleben den
+        // Zusatz direkt an ("ピカチュウex"), westliche trennen ihn ("Pikachu ex").
+        const t3 = (before.trim() + n + after.trim()).trim();
+        return [...new Set([t1, t2, t3])];
+      } };
+    }
+    return { mode: best.mode, terms(lg) { const n = nameFor(lg); return n ? [n] : []; } };
   }
   // Erkennt japanische/chinesische/koreanische Schriftzeichen im Suchbegriff.
   const hasCJK = (s) => /[぀-ヿ㐀-䶿一-鿿가-힯ｦ-ﾟ]/.test(String(s || ''));
@@ -220,11 +243,10 @@
         }
       }
     } else {
-      // Pro Sprach-Datenbank mit dem passenden Namen suchen. Japanisch wird
-      // IMMER mit abgefragt (übersetzt über die Namenstabelle), damit
-      // japanische Karten nicht fehlen -- und umgekehrt liefert eine
-      // japanische Eingabe auch die internationalen Karten.
-      const variants = await pokeNameVariants(q).catch(() => null);
+      // Pro Sprach-Datenbank mit dem passenden Namen suchen: Japanisch und
+      // Chinesisch werden immer mit abgefragt (übersetzt über die Namenstabelle),
+      // Zusätze wie "ex"/"VMAX" bleiben dabei erhalten.
+      const plan = await pokeQueryPlan(q).catch(() => null);
       const cjk = hasCJK(q);
       const queries = new Map(); // locale -> Set von Suchbegriffen
       const addQ = (loc, term) => {
@@ -232,15 +254,15 @@
         if (!queries.has(loc)) queries.set(loc, new Set());
         queries.get(loc).add(term);
       };
-      if (!cjk || locale === 'ja') addQ(locale, q);
-      if (variants && variants[locale]) addQ(locale, variants[locale]);
-      if (!cjk) addQ('en', q);                              // Original-Eingabe (auch Teilbegriffe)
-      if (variants && variants.en) addQ('en', variants.en); // Übersetzung (z. B. Glurak -> Charizard)
-      if (cjk) addQ('ja', q);
-      if (variants && variants.ja) addQ('ja', variants.ja);
-      if (cjk) addQ('zh-tw', q);                            // chinesische Eingabe direkt
-      if (variants && variants['zh-tw']) addQ('zh-tw', variants['zh-tw']);
-      if (variants && variants['zh-cn']) addQ('zh-cn', variants['zh-cn']);
+      // Roh-Eingabe in die Datenbanken, deren Schrift dazu passt
+      if (!cjk) { addQ(locale, q); addQ('en', q); }
+      else { addQ('ja', q); addQ('zh-tw', q); if (locale === 'ja' || locale === 'zh-tw' || locale === 'zh-cn') addQ(locale, q); }
+      // Übersetzte Begriffe (inkl. Zusätzen) für alle relevanten Sprachen
+      if (plan) {
+        for (const loc of new Set([locale, 'en', 'ja', 'zh-tw', 'zh-cn'])) {
+          for (const term of plan.terms(loc)) addQ(loc, term);
+        }
+      }
       const pairs = [];
       for (const [loc, terms] of queries) for (const term of terms) pairs.push([loc, term]);
       const arrays = await Promise.all(
