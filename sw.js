@@ -35,6 +35,15 @@
   // Karte fuer Karte durch und bricht NICHT komplett ab, wenn eine einzelne
   // Preisabfrage fehlschlaegt (z. B. Netzwerk-Hänger oder Rate-Limit) --
   // stattdessen wird der Fehler gesammelt und der Rest normal weiter aktualisiert.
+  // Patch fuer ein Preis-Update bauen. Wenn die Quelle eine Waehrung mitliefert
+  // (z. B. USD-Ersatzpreis von TCGplayer, weil Cardmarket nichts hat), wird sie
+  // zusammen mit dem Preis gespeichert, damit Preis und Waehrung zusammenpassen.
+  function pricePatch(p) {
+    const patch = { price_current: p.price, price_low: p.low, price_trend: p.trend };
+    if (p.currency && p.price != null) patch.currency = p.currency;
+    return patch;
+  }
+
   async function refreshPrices(rows, applyUpdate) {
     let updated = 0;
     const errors = [];
@@ -121,7 +130,7 @@
 
   route('POST', '/api/collection/refresh-prices', async () => {
     const rows = await D.allForRefresh();
-    const result = await refreshPrices(rows, (id, p) => D.updateCard(id, { price_current: p.price, price_low: p.low, price_trend: p.trend }));
+    const result = await refreshPrices(rows, (id, p) => D.updateCard(id, pricePatch(p)));
     await D.recordSnapshot();
     return ok(result);
   });
@@ -177,7 +186,7 @@
 
   route('POST', '/api/sold/refresh-prices', async () => {
     const rows = await D.soldForRefresh();
-    const result = await refreshPrices(rows, (id, p) => D.updateCard(id, { price_current: p.price, price_low: p.low, price_trend: p.trend }));
+    const result = await refreshPrices(rows, (id, p) => D.updateCard(id, pricePatch(p)));
     return ok(result);
   });
 
@@ -210,7 +219,7 @@
 
   route('POST', '/api/wishlist/refresh-prices', async () => {
     const rows = await D.wishlistForRefresh();
-    const result = await refreshPrices(rows, (id, p) => D.updateWishlist(id, { price_current: p.price, price_low: p.low, price_trend: p.trend }));
+    const result = await refreshPrices(rows, (id, p) => D.updateWishlist(id, pricePatch(p)));
     return ok(result);
   });
 

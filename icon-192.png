@@ -93,7 +93,7 @@
 
   async function updateCard(id, fields) {
     const allowed = ['quantity', 'condition', 'language', 'notes', 'price_current', 'price_low', 'price_trend',
-      'purchase_price', 'purchase_date', 'status', 'sold_price', 'sold_date'];
+      'currency', 'purchase_price', 'purchase_date', 'status', 'sold_price', 'sold_date'];
     const patch = {};
     for (const k of allowed) if (fields[k] !== undefined) patch[k] = fields[k];
     if (!Object.keys(patch).length) {
@@ -254,7 +254,7 @@
 
   async function getAnalysis() {
     const owned = must(await getClient().from('cards')
-      .select('name, set_name, rarity, condition, game, image_url, quantity, price_current, price_at_add, currency')
+      .select('name, set_name, rarity, condition, game, language, image_url, quantity, price_current, price_at_add, currency')
       .eq('status', 'owned'));
     const val = (r) => (r.price_current ?? r.price_at_add ?? 0) * r.quantity;
     const eurCards = owned.filter(r => (r.currency || 'EUR') !== 'USD');
@@ -267,6 +267,7 @@
     };
 
     const byGame = group(eurCards, r => ({ pokemon: 'Pokémon', magic: 'Magic', yugioh: 'Yu-Gi-Oh' }[r.game] || r.game));
+    const byLanguage = group(eurCards, r => (r.language || '—').toLowerCase());
     const byRarity = group(eurCards, r => r.rarity).slice(0, 10);
     const bySet = group(eurCards, r => r.set_name).slice(0, 10);
     const byCondition = group(eurCards, r => r.condition);
@@ -285,7 +286,7 @@
       avgEur: eurCards.length ? eurValue / eurCards.reduce((s, r) => s + r.quantity, 0) : 0,
       mostValuable: topCards[0] || null,
     };
-    return { byGame, byRarity, bySet, byCondition, topCards, stats, usdValue };
+    return { byGame, byLanguage, byRarity, bySet, byCondition, topCards, stats, usdValue };
   }
 
   // --- Gegradete Karten -----------------------------------------------------
@@ -353,7 +354,7 @@
     return must(await getClient().from('wishlist').insert(row).select().single());
   }
   async function updateWishlist(id, fields) {
-    const allowed = ['quantity', 'language', 'notes', 'price_current', 'price_low', 'price_trend', 'target_price'];
+    const allowed = ['quantity', 'language', 'notes', 'price_current', 'price_low', 'price_trend', 'currency', 'target_price'];
     const patch = {};
     for (const k of allowed) if (fields[k] !== undefined) patch[k] = fields[k];
     if (!Object.keys(patch).length) return must(await getClient().from('wishlist').select('*').eq('id', id).maybeSingle());
