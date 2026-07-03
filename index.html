@@ -254,10 +254,34 @@
   .set-row button:hover { background:var(--gold); color:#1a1408; }
   .set-count { font-size:.78rem; color:var(--muted); margin:10px 0 0; }
   .sp-type { font-size:.62rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--gold); border:1px solid var(--border); border-radius:5px; padding:1px 6px; margin-left:6px; }
+
+.auth-screen { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+.auth-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:28px; width:100%; max-width:360px; }
+.auth-card label { display:block; font-size:13px; color:var(--muted); margin-top:12px; }
+.auth-card input { width:100%; margin-top:4px; padding:9px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:14px; }
 </style>
 </head>
 <body>
-<div class="wrap">
+<div id="auth-screen" class="auth-screen">
+  <div class="auth-card">
+    <div class="brand" style="justify-content:center;margin-bottom:6px">
+      <svg class="brand-logo" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3 6 Q12 3.2 21 6"/><path d="M4.3 9.2 H19.7"/><path d="M7 6.6 V20"/><path d="M17 6.6 V20"/>
+      </svg>Tiny Tokyo<span> Tracker</span>
+    </div>
+    <p class="msub" style="text-align:center;margin:0 0 16px">Jeder Account hat seine eigene, private Sammlung.</p>
+    <form id="auth-form">
+      <label>E-Mail<input type="email" id="auth-email" autocomplete="username" required /></label>
+      <label>Passwort<input type="password" id="auth-password" autocomplete="current-password" required minlength="6" /></label>
+      <div class="row" style="gap:8px;margin-top:10px">
+        <button type="submit" id="auth-login-btn" style="flex:1">Anmelden</button>
+        <button type="button" id="auth-signup-btn" class="ghost" style="flex:1">Neu registrieren</button>
+      </div>
+      <p class="hint" id="auth-status" style="min-height:1.2em;margin-top:10px"></p>
+    </form>
+  </div>
+</div>
+<div class="wrap" style="display:none">
   <div class="topbar">
     <div class="brand">
       <svg class="brand-logo" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -276,6 +300,7 @@
       <a href="#/analyse" data-view="analyse">Analyse</a>
       <a href="#/graded" data-view="graded">Graded</a>
       <a href="#/einstellungen" data-view="einstellungen">Einstellungen</a>
+      <a href="#" id="logout-link" title="Abmelden">Abmelden</a>
     </nav>
   </div>
 
@@ -509,12 +534,15 @@
         <input type="file" id="fullimport-file" accept=".json,application/json" style="display:none" />
       </div>
       <ul style="margin-top:12px">
-        <li><b>Komplett-Backup ⤓ / Wiederherstellen ⤒:</b> speichert bzw. lädt <b>alle</b> Bereiche
-            (Sammlung, Verkauft, Wunschliste, Versiegelt, Graded, Verläufe) als eine JSON-Datei.
-            Ideal zum Übertragen zwischen Windows und Mac. Wiederherstellen ersetzt die aktuellen
-            Daten (mit Rückfrage; vorher wird automatisch gesichert).</li>
-        <li><b>Sicherung jetzt:</b> legt sofort eine Kopie der Datenbank im Ordner <code>backups/</code>
-            an. Das passiert ohnehin automatisch bei jedem Start (die letzten 10 werden behalten).</li>
+        <li><b>Deine Daten liegen jetzt in der Cloud</b> (Supabase), an deinen Account gebunden –
+            alle Geräte, auf denen du mit demselben Account eingeloggt bist, zeigen automatisch
+            dieselbe Sammlung. Die Datenbank kümmert sich selbst um die dauerhafte Speicherung.</li>
+        <li><b>Komplett-Backup ⤓ / Wiederherstellen ⤒:</b> speichert bzw. lädt trotzdem <b>alle</b>
+            Bereiche (Sammlung, Verkauft, Wunschliste, Versiegelt, Graded, Verläufe) als eine
+            JSON-Datei – praktisch als eigene Kopie zum Aufbewahren oder zum Umzug in einen
+            anderen Account. Wiederherstellen ersetzt alle aktuellen Daten <b>dieses Accounts</b>
+            (mit Rückfrage).</li>
+        <li><b>Sicherung jetzt:</b> prüft nur, ob die Verbindung zur Cloud-Datenbank steht.</li>
         <li><b>Excel:</b> Export/Import nur der Sammlung – praktisch zum Bearbeiten in Tabellen.</li>
       </ul>
     </div>
@@ -864,7 +892,104 @@
   </div>
 </div>
 
+<script src="lib/supabase.js"></script>
+<script src="config.js"></script>
+<script src="db-supabase.js"></script>
+<script src="adapters-browser.js"></script>
+<script src="lib/xlsx.full.min.js"></script>
+<script src="server-logic.js"></script>
 <script>
+// ================= Login & lokale API-Weiterleitung (Supabase) =================
+// Kein Server mehr noetig: window.fetch wird fuer alles unter "api/" lokal von
+// ServerLogic.handle() beantwortet, das intern Supabase (Cloud-Datenbank) fragt.
+const realFetch = window.fetch.bind(window);
+window.fetch = async function (input, init) {
+  const urlStr = typeof input === 'string' ? input : (input && input.url) || '';
+  const isAbsolute = /^https?:\/\//i.test(urlStr);
+  if (!isAbsolute && urlStr.indexOf('api/') !== -1) {
+    const req = new Request(new URL(urlStr, location.href).toString(), init);
+    const result = await self.ServerLogic.handle(req);
+    if (!result) return new Response(JSON.stringify({ error: 'Unbekannte Route' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+    const headers = Object.assign({}, result.headers || {});
+    if (result.buffer) {
+      headers['Content-Type'] = result.contentType || 'application/octet-stream';
+      return new Response(result.buffer, { status: result.status || 200, headers });
+    }
+    headers['Content-Type'] = 'application/json; charset=utf-8';
+    const bodyText = result.json === null ? '' : JSON.stringify(result.json);
+    return new Response(bodyText, { status: result.status || 200, headers });
+  }
+  return realFetch(input, init);
+};
+
+async function downloadViaApi(path, filename) {
+  try {
+    const r = await fetch(path);
+    if (!r.ok) { alert('Download fehlgeschlagen.'); return; }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  } catch { alert('Download fehlgeschlagen.'); }
+}
+
+// ---- Login / Registrierung ----
+const authScreenEl = document.getElementById('auth-screen');
+const appWrapEl = document.querySelector('.wrap');
+const authEmailEl = document.getElementById('auth-email');
+const authPasswordEl = document.getElementById('auth-password');
+const authStatusEl = document.getElementById('auth-status');
+const authSignupBtnEl = document.getElementById('auth-signup-btn');
+const authLoginBtnEl = document.getElementById('auth-login-btn');
+
+let appStarted = false;
+async function startAppAfterAuth() {
+  authScreenEl.style.display = 'none';
+  appWrapEl.style.display = '';
+  if (appStarted) return;
+  appStarted = true;
+  if ('serviceWorker' in navigator) {
+    try { await navigator.serviceWorker.register('sw.js'); } catch (e) { console.warn('Service Worker:', e); }
+  }
+  route();
+}
+function showAuth(msg) {
+  authScreenEl.style.display = '';
+  appWrapEl.style.display = 'none';
+  if (msg) authStatusEl.textContent = msg;
+}
+
+document.getElementById('auth-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  authStatusEl.textContent = 'Anmelden…'; authLoginBtnEl.disabled = true; authSignupBtnEl.disabled = true;
+  try { await self.DB.signIn(authEmailEl.value.trim(), authPasswordEl.value); await startAppAfterAuth(); }
+  catch (err) { authStatusEl.textContent = err.message || 'Anmeldung fehlgeschlagen.'; }
+  finally { authLoginBtnEl.disabled = false; authSignupBtnEl.disabled = false; }
+});
+authSignupBtnEl.addEventListener('click', async () => {
+  authStatusEl.textContent = 'Registriere…'; authLoginBtnEl.disabled = true; authSignupBtnEl.disabled = true;
+  try {
+    const data = await self.DB.signUp(authEmailEl.value.trim(), authPasswordEl.value);
+    if (data && data.session) { await startAppAfterAuth(); }
+    else { authStatusEl.textContent = 'Registriert! Falls eine Bestätigungsmail kommt, bitte bestätigen und dann anmelden.'; }
+  } catch (err) { authStatusEl.textContent = err.message || 'Registrierung fehlgeschlagen.'; }
+  finally { authLoginBtnEl.disabled = false; authSignupBtnEl.disabled = false; }
+});
+
+(async function initAuth() {
+  try {
+    await self.DB.init();
+    const session = await self.DB.getSession();
+    if (session) await startAppAfterAuth(); else showAuth();
+  } catch (e) { showAuth('Verbindung zur Datenbank fehlgeschlagen: ' + (e && e.message || e)); }
+})();
+
+document.addEventListener('DOMContentLoaded', () => {
+  const lo = document.getElementById('logout-link');
+  if (lo) lo.addEventListener('click', async (e) => { e.preventDefault(); await self.DB.signOut(); appStarted = false; location.reload(); });
+});
 const eur = (n) => (n ?? 0).toLocaleString('de-DE',{style:'currency',currency:'EUR'});
 // Währungsbewusste Formatierung (€ für Cardmarket, $ für One Piece / TCGPlayer)
 const fmt = (n, cur='EUR') => (n ?? 0).toLocaleString(cur==='USD'?'en-US':'de-DE',{style:'currency',currency:cur});
@@ -1333,7 +1458,7 @@ async function loadHistory() {
   renderChart();
 }
 document.getElementById('chart-metric').addEventListener('change', renderChart);
-document.getElementById('history-export-btn').addEventListener('click', ()=>{ window.location.href = 'api/collection/history/export'; });
+document.getElementById('history-export-btn').addEventListener('click', ()=>{ downloadViaApi('api/collection/history/export', 'tcg-wertverlauf.xlsx'); });
 
 function renderChart() {
   const metric = document.getElementById('chart-metric').value;
@@ -1840,7 +1965,7 @@ function editPrice(item, card) {
 }
 
 // ---- Excel Export/Import ----
-function exportExcel() { window.location.href = 'api/collection/export'; }
+function exportExcel() { downloadViaApi('api/collection/export', 'tcg-sammlung.xlsx'); }
 function importExcel(file) {
   const reader = new FileReader();
   reader.onload = async () => {
@@ -1888,14 +2013,13 @@ document.getElementById('backup-btn').addEventListener('click', async e=>{
 });
 // Komplett-Backup: alle Daten als JSON herunterladen
 document.getElementById('fullexport-btn').addEventListener('click', ()=>{
-  const a=document.createElement('a'); a.href='api/data/export'; a.download='tiny-tokyo-backup.json';
-  document.body.appendChild(a); a.click(); a.remove();
+  downloadViaApi('api/data/export', 'tiny-tokyo-backup.json');
 });
 // Wiederherstellen: JSON-Backup einlesen (ersetzt die aktuellen Daten)
 document.getElementById('fullimport-btn').addEventListener('click', ()=>document.getElementById('fullimport-file').click());
 document.getElementById('fullimport-file').addEventListener('change', async e=>{
   const file=e.target.files[0]; e.target.value=''; if(!file) return;
-  if(!confirm('Wiederherstellen ersetzt ALLE aktuellen Daten (Sammlung, Wunschliste, Versiegelt, Graded, Verkauft) durch die Datei. Vorher wird automatisch eine Sicherung angelegt. Fortfahren?')) return;
+  if(!confirm('Wiederherstellen ersetzt ALLE aktuellen Daten dieses Accounts (Sammlung, Wunschliste, Versiegelt, Graded, Verkauft) durch die Datei. Das kann nicht rückgängig gemacht werden. Fortfahren?')) return;
   let data;
   try { data = JSON.parse(await file.text()); } catch { alert('Die Datei ist keine gültige JSON-Backup-Datei.'); return; }
   try {
@@ -2181,28 +2305,6 @@ function applyTheme(t){
   document.title = document.querySelector('.brand').textContent.replace(/\s+/g,' ').trim();
 })();
 
-// ---- Service Worker: uebernimmt jetzt die Rolle des Servers (kein Node-Server
-// mehr noetig). Erst wenn er wirklich "an" ist, laufen die api/...-Aufrufe der
-// App korrekt -> deshalb hier kurz warten (und beim allerersten Start einmal
-// automatisch neu laden), bevor die Seite ihre Daten laedt.
-async function bootServiceWorkerThenStart() {
-  if (!('serviceWorker' in navigator)) { route(); return; }
-  try {
-    await navigator.serviceWorker.register('sw.js');
-    await navigator.serviceWorker.ready;
-    if (!navigator.serviceWorker.controller) {
-      const already = sessionStorage.getItem('ttt-sw-reload');
-      if (!already) {
-        sessionStorage.setItem('ttt-sw-reload', '1');
-        location.reload();
-        return;
-      }
-    }
-  } catch (e) {
-    console.warn('Service Worker konnte nicht gestartet werden:', e);
-  }
-  route();
-}
 (async function initGradedKeySettings(){
   const input = document.getElementById('pokeprice-key');
   const status = document.getElementById('pokeprice-key-status');
@@ -2226,8 +2328,6 @@ async function bootServiceWorkerThenStart() {
     finally { saveBtn.disabled = false; }
   });
 })();
-
-bootServiceWorkerThenStart();
 </script>
 </body>
 </html>

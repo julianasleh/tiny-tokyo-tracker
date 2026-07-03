@@ -1,7 +1,8 @@
-// server-logic.js – "Routen"-Logik, portiert aus server.js. Läuft im Service
-// Worker und ersetzt Express: statt app.get(...)/app.post(...) gibt es eine
-// kleine eigene Routenliste. self.DB und self.Adapters müssen vorher geladen sein
-// (importScripts in sw.js).
+// server-logic.js – "Routen"-Logik, portiert aus server.js. Laeuft im Hauptthread
+// (index.html) und ersetzt Express: statt app.get(...)/app.post(...) gibt es eine
+// kleine eigene Routenliste. self.DB und self.Adapters muessen vorher geladen sein.
+// Seit der Supabase-Umstellung sind ALLE D.*-Aufrufe async (Netzwerk statt
+// lokaler Datenbank) -- deshalb ueberall await.
 
 (function () {
   'use strict';
@@ -63,67 +64,67 @@
   });
 
   // --- Sammlung ---------------------------------------------------------------
-  route('GET', '/api/collection', async () => ok({ cards: D.listCards() }));
+  route('GET', '/api/collection', async () => ok({ cards: await D.listCards() }));
 
   route('POST', '/api/collection', async ({ body }) => {
     const c = body;
     if (!c || !c.game || !c.externalId || !c.name) return bad(400, { error: 'game, externalId und name sind erforderlich' });
-    return ok({ card: D.addCard(c) }, 201);
+    return ok({ card: await D.addCard(c) }, 201);
   });
 
   route('PATCH', '/api/collection/:id', async ({ params, body }) => {
-    const card = D.updateCard(Number(params.id), body || {});
+    const card = await D.updateCard(Number(params.id), body || {});
     if (!card) return bad(404, { error: 'Nicht gefunden' });
     return ok({ card });
   });
 
   route('DELETE', '/api/collection/:id', async ({ params }) => {
-    const okDel = D.deleteCard(Number(params.id));
+    const okDel = await D.deleteCard(Number(params.id));
     return { status: okDel ? 204 : 404, json: null };
   });
 
   route('POST', '/api/collection/refresh-prices', async () => {
-    const rows = D.allForRefresh();
+    const rows = await D.allForRefresh();
     let updated = 0;
     for (const r of rows) {
       const p = await A.fetchPrices(r.game, r.external_id);
       if (p.price !== null || p.low !== null || p.trend !== null) {
-        D.updateCard(r.id, { price_current: p.price, price_low: p.low, price_trend: p.trend });
+        await D.updateCard(r.id, { price_current: p.price, price_low: p.low, price_trend: p.trend });
         updated++;
       }
       await new Promise((res) => setTimeout(res, 120));
     }
-    D.recordSnapshot();
+    await D.recordSnapshot();
     return ok({ updated, total: rows.length });
   });
 
-  route('GET', '/api/collection/history', async () => ok({ history: D.getHistory(), totals: D.computeTotals() }));
+  route('GET', '/api/collection/history', async () => ok({ history: await D.getHistory(), totals: await D.computeTotals() }));
 
-  route('GET', '/api/portfolio', async () => ok({ portfolio: D.computePortfolio(), analysis: D.getAnalysis() }));
+  route('GET', '/api/portfolio', async () => ok({ portfolio: await D.computePortfolio(), analysis: await D.getAnalysis() }));
 
   route('GET', '/api/collection/movers', async ({ query }) => {
     const days = Math.max(1, parseInt(query.days) || 30);
-    return ok({ days, ...D.getMovers(days, 6) });
+    return ok({ days, ...(await D.getMovers(days, 6)) });
   });
 
   // --- Verkaufte Karten -------------------------------------------------------
   route('GET', '/api/sold', async () => {
     const items = [];
-    for (const c of D.listSold()) items.push({
+    for (const c of await D.listSold()) items.push({
       source: 'card', id: c.id, name: c.name, image_url: c.image_url, cardmarket_url: c.cardmarket_url,
       currency: c.currency || 'EUR', quantity: c.quantity,
       purchase_price: c.purchase_price, sold_price: c.sold_price, sold_date: c.sold_date,
       current_value: c.price_current ?? c.price_at_add ?? null,
       game: c.game, set_name: c.set_name, set_code: c.set_code, number: c.number, language: c.language,
     });
-    for (const s of D.listSealedSold()) items.push({
+    for (const s of await D.listSealedSold()) items.push({
       source: 'sealed', id: s.id, name: s.name, image_url: s.image_url, cardmarket_url: s.cardmarket_url,
       currency: s.currency || 'EUR', quantity: s.quantity,
       purchase_price: s.purchase_price, sold_price: s.sold_price, sold_date: s.sold_date,
       current_value: s.current_value,
       game: s.game, set_name: s.set_name, product_type: s.product_type,
     });
-    for (const g of D.listGradedSold()) items.push({
+    for (const g of await D.listGradedSold()) items.push({
       source: 'graded', id: g.id, name: g.name, image_url: g.image_url, cardmarket_url: null,
       currency: g.currency || 'USD', quantity: 1,
       purchase_price: g.purchase_price, sold_price: g.sold_price, sold_date: g.sold_date,
@@ -147,12 +148,12 @@
   });
 
   route('POST', '/api/sold/refresh-prices', async () => {
-    const rows = D.soldForRefresh();
+    const rows = await D.soldForRefresh();
     let updated = 0;
     for (const r of rows) {
       const p = await A.fetchPrices(r.game, r.external_id);
       if (p.price !== null || p.low !== null || p.trend !== null) {
-        D.updateCard(r.id, { price_current: p.price, price_low: p.low, price_trend: p.trend });
+        await D.updateCard(r.id, { price_current: p.price, price_low: p.low, price_trend: p.trend });
         updated++;
       }
       await new Promise((res) => setTimeout(res, 120));
@@ -165,36 +166,35 @@
   route('GET', '/api/backups', async () => ok({ backups: await D.listBackups() }));
 
   route('GET', '/api/data/export', async () => ({
-    status: 200, json: D.exportAll(),
+    status: 200, json: await D.exportAll(),
     headers: { 'Content-Disposition': `attachment; filename="tiny-tokyo-backup-${new Date().toISOString().slice(0, 10)}.json"` },
   }));
   route('POST', '/api/data/import', async ({ body }) => {
     try {
-      await D.backupDatabase();
       const counts = await D.importAll(body && body.data);
       return ok({ ok: true, counts });
     } catch (e) { return bad(400, { ok: false, error: String((e && e.message) || e) }); }
   });
 
-  route('GET', '/api/collection/:id/history', async ({ params }) => ok({ history: D.getCardHistory(Number(params.id)) }));
+  route('GET', '/api/collection/:id/history', async ({ params }) => ok({ history: await D.getCardHistory(Number(params.id)) }));
 
   // --- Wunschliste ------------------------------------------------------------
-  route('GET', '/api/wishlist', async () => ok({ items: D.listWishlist(), totals: D.wishlistTotals() }));
+  route('GET', '/api/wishlist', async () => ok({ items: await D.listWishlist(), totals: await D.wishlistTotals() }));
   route('POST', '/api/wishlist', async ({ body }) => {
     const c = body || {};
     if (!c.game || !c.externalId || !c.name) return bad(400, { error: 'game, externalId, name nötig' });
-    return ok(D.addWishlist(c));
+    return ok(await D.addWishlist(c));
   });
-  route('PATCH', '/api/wishlist/:id', async ({ params, body }) => ok(D.updateWishlist(Number(params.id), body || {})));
-  route('DELETE', '/api/wishlist/:id', async ({ params }) => ok({ ok: D.deleteWishlist(Number(params.id)) }));
+  route('PATCH', '/api/wishlist/:id', async ({ params, body }) => ok(await D.updateWishlist(Number(params.id), body || {})));
+  route('DELETE', '/api/wishlist/:id', async ({ params }) => ok({ ok: await D.deleteWishlist(Number(params.id)) }));
 
   route('POST', '/api/wishlist/refresh-prices', async () => {
-    const rows = D.wishlistForRefresh();
+    const rows = await D.wishlistForRefresh();
     let updated = 0;
     for (const r of rows) {
       const p = await A.fetchPrices(r.game, r.external_id);
       if (p.price !== null || p.low !== null || p.trend !== null) {
-        D.updateWishlist(r.id, { price_current: p.price, price_low: p.low, price_trend: p.trend });
+        await D.updateWishlist(r.id, { price_current: p.price, price_low: p.low, price_trend: p.trend });
         updated++;
       }
       await new Promise((res) => setTimeout(res, 120));
@@ -203,9 +203,10 @@
   });
 
   route('POST', '/api/wishlist/:id/to-collection', async ({ params }) => {
-    const item = D.listWishlist().find((w) => w.id === Number(params.id));
+    const list = await D.listWishlist();
+    const item = list.find((w) => w.id === Number(params.id));
     if (!item) return bad(404, { error: 'nicht gefunden' });
-    const card = D.addCard({
+    const card = await D.addCard({
       game: item.game, externalId: item.external_id, name: item.name,
       setName: item.set_name, setCode: item.set_code, number: item.number, rarity: item.rarity,
       imageUrl: item.image_url, cardmarketUrl: item.cardmarket_url,
@@ -213,7 +214,7 @@
       cardmarketPrice: item.price_current, priceLow: item.price_low, priceTrend: item.price_trend,
       currency: item.currency || 'EUR',
     });
-    D.deleteWishlist(item.id);
+    await D.deleteWishlist(item.id);
     return ok({ ok: true, card });
   });
 
@@ -226,19 +227,20 @@
   });
 
   // --- Versiegelte Ware ---------------------------------------------------------
-  route('GET', '/api/sealed', async () => ok({ items: D.listSealed(), totals: D.sealedTotals() }));
+  route('GET', '/api/sealed', async () => ok({ items: await D.listSealed(), totals: await D.sealedTotals() }));
   route('POST', '/api/sealed', async ({ body }) => {
     const c = body || {};
     if (!c.game || !c.name || !c.productType) return bad(400, { error: 'game, name, productType nötig' });
-    return ok(D.addSealed(c));
+    return ok(await D.addSealed(c));
   });
-  route('PATCH', '/api/sealed/:id', async ({ params, body }) => ok(D.updateSealed(Number(params.id), body || {})));
-  route('DELETE', '/api/sealed/:id', async ({ params }) => ok({ ok: D.deleteSealed(Number(params.id)) }));
+  route('PATCH', '/api/sealed/:id', async ({ params, body }) => ok(await D.updateSealed(Number(params.id), body || {})));
+  route('DELETE', '/api/sealed/:id', async ({ params }) => ok({ ok: await D.deleteSealed(Number(params.id)) }));
 
-  route('POST', '/api/collection/snapshot', async () => { D.recordSnapshot(); return ok({ totals: D.computeTotals() }); });
+  route('POST', '/api/collection/snapshot', async () => { await D.recordSnapshot(); return ok({ totals: await D.computeTotals() }); });
 
   route('GET', '/api/collection/history/export', async () => {
-    const rows = D.getHistory().map((h) => ({
+    const hist = await D.getHistory();
+    const rows = hist.map((h) => ({
       'Datum': h.day, 'Wert 30T-Schnitt': h.total, 'Ab-Wert': h.total_low, 'Preistrend': h.total_trend,
     }));
     const ws = XLSX.utils.json_to_sheet(rows, { header: ['Datum', 'Wert 30T-Schnitt', 'Ab-Wert', 'Preistrend'] });
@@ -261,22 +263,23 @@
       return bad(502, { error: 'Graded-Quelle nicht erreichbar', detail: e.message });
     }
   });
-  route('GET', '/api/graded', async () => ok({ cards: D.listGraded() }));
+  route('GET', '/api/graded', async () => ok({ cards: await D.listGraded() }));
   route('POST', '/api/graded', async ({ body }) => {
     const c = body;
     if (!c || !c.name || !c.company || c.grade == null) return bad(400, { error: 'name, company und grade sind erforderlich' });
-    return ok({ card: D.addGraded(c) }, 201);
+    return ok({ card: await D.addGraded(c) }, 201);
   });
   route('PATCH', '/api/graded/:id', async ({ params, body }) => {
-    const card = D.updateGraded(Number(params.id), body);
+    const card = await D.updateGraded(Number(params.id), body);
     if (!card) return bad(404, { error: 'Nicht gefunden' });
     return ok({ card });
   });
-  route('DELETE', '/api/graded/:id', async ({ params }) => ({ status: D.deleteGraded(Number(params.id)) ? 204 : 404, json: null }));
+  route('DELETE', '/api/graded/:id', async ({ params }) => ({ status: (await D.deleteGraded(Number(params.id))) ? 204 : 404, json: null }));
 
   // --- Excel-Export/-Import ------------------------------------------------------
   route('GET', '/api/collection/export', async () => {
-    const rows = D.listCards().map((c) => ({
+    const cards = await D.listCards();
+    const rows = cards.map((c) => ({
       'Spiel': c.game, 'Name': c.name, 'Set': c.set_name, 'Set-Code': c.set_code, 'Nummer': c.number,
       'Seltenheit': c.rarity, 'Anzahl': c.quantity, 'Zustand': c.condition, 'Sprache': c.language,
       'Preis 30T-Schnitt': c.price_current ?? c.price_at_add, 'Ab-Preis': c.price_low, 'Preistrend': c.price_trend,
@@ -303,12 +306,13 @@
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, { defval: null });
       let added = 0, skipped = 0;
-      rows.forEach((r, i) => {
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
         const game = String(r['Spiel'] || '').toLowerCase().trim();
         const name = r['Name'];
-        if (!A.SUPPORTED_GAMES.includes(game) || !name) { skipped++; return; }
+        if (!A.SUPPORTED_GAMES.includes(game) || !name) { skipped++; continue; }
         const price = numOrNull(r['Preis 30T-Schnitt']);
-        D.addCard({
+        await D.addCard({
           game, name: String(name),
           externalId: r['ExterneID'] ? String(r['ExterneID']) : `import-${Date.now()}-${i}`,
           setName: r['Set'] ?? null, setCode: r['Set-Code'] ?? null,
@@ -322,7 +326,7 @@
           purchasePrice: numOrNull(r['Kaufpreis']), purchaseDate: r['Kaufdatum'] ? String(r['Kaufdatum']) : null,
         });
         added++;
-      });
+      }
       return ok({ added, skipped });
     } catch (e) {
       return bad(400, { error: 'Datei konnte nicht gelesen werden. Bitte eine .xlsx im Export-Format verwenden.' });
