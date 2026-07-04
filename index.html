@@ -586,6 +586,7 @@
     <div class="filterbar row">
       <div class="row" id="cm-tabs">
         <button class="chip active" data-tab="angebote">Angebote</button>
+        <button class="chip" data-tab="trades">Trades <span class="count" id="cm-trades-tab"></span></button>
         <button class="chip" data-tab="postfach">Postfach <span class="count" id="cm-unread-tab"></span></button>
         <button class="chip" data-tab="rangliste">Rangliste</button>
       </div>
@@ -602,6 +603,7 @@
       <input type="text" id="cm-search" placeholder="Angebote durchsuchen…" style="max-width:220px" />
     </div>
     <div id="community-list"></div>
+    <div id="community-trades" style="display:none"></div>
     <div id="community-inbox" style="display:none"></div>
     <div id="community-board" style="display:none"></div>
   </section>
@@ -950,6 +952,23 @@
       <p class="msub" id="pf-rate-status" style="min-height:1.2em;margin:6px 0 0"></p>
     </div>
     <div id="pf-ratings"></div>
+  </div>
+</div>
+
+<!-- Trade anfragen -->
+<div class="modal-bg" id="trade-modal">
+  <div class="modal">
+    <h3 id="tr-title">Trade anfragen</h3>
+    <div class="msub" id="tr-sub"></div>
+    <div class="field"><label>Dein Preisvorschlag (optional)</label><input type="text" id="tr-price" placeholder="z. B. 140,00" /></div>
+    <div class="field"><label>Nachricht an den Anbieter (optional)</label>
+      <textarea id="tr-msg" rows="3" maxlength="1000" placeholder="z. B. Tausch gegen … möglich? Versand nach …?" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 13px;color:var(--text);font:inherit;resize:vertical"></textarea>
+    </div>
+    <p class="msub">So läuft's: Der Anbieter nimmt an oder lehnt ab. Nach der Abwicklung (Bezahlung/Versand regelt ihr selbst) bestätigen <b>beide</b> den Abschluss – erst dann zählt der Trade für Statistik und Vertrauen.</p>
+    <div class="mactions">
+      <button class="ghost" id="tr-cancel">Abbrechen</button>
+      <button id="tr-send">Anfrage senden</button>
+    </div>
   </div>
 </div>
 
@@ -1907,8 +1926,10 @@ function cmShowTab(tab) {
   document.querySelectorAll('#cm-tabs .chip').forEach(c=>c.classList.toggle('active', c.dataset.tab===tab));
   document.getElementById('cm-filterbar').style.display = tab==='angebote' ? '' : 'none';
   document.getElementById('community-list').style.display = tab==='angebote' ? '' : 'none';
+  document.getElementById('community-trades').style.display = tab==='trades' ? '' : 'none';
   document.getElementById('community-inbox').style.display = tab==='postfach' ? '' : 'none';
   document.getElementById('community-board').style.display = tab==='rangliste' ? '' : 'none';
+  if (tab==='trades') loadTrades();
   if (tab==='postfach') loadInbox();
   if (tab==='rangliste') loadBoard();
 }
@@ -1959,16 +1980,16 @@ function renderCommunity() {
     const ref = refText({ setCode: c.set_code, number: c.number });
     const cflag = countryFlag(c.seller_country);
     return `
-    <div class="collection-item" data-sid="${escapeHtml(c.seller_id||'')}" data-sname="${escapeHtml(c.seller_name||'Sammler')}" data-cname="${escapeHtml(c.name||'')}">
+    <div class="collection-item" data-sid="${escapeHtml(c.seller_id||'')}" data-sname="${escapeHtml(c.seller_name||'Sammler')}" data-cname="${escapeHtml(c.name||'')}" data-cid="${c.id}" data-game="${escapeHtml(c.game||'')}" data-price="${c.asking_price ?? c.price_current ?? ''}" data-cur="${escapeHtml(c.currency||'EUR')}">
       ${c.image_url ? `<img src="${c.image_url}" alt="" loading="lazy" />` : ''}
       <div class="ci-main">
         <div class="ci-name">${escapeHtml(c.name)}${c.quantity>1?` ×${c.quantity}`:''}${c.is_mine?'<span class="badge-target">dein Angebot</span>':''}${isWishMatch(c)?'<span class="badge-target">🎯 Wunschliste</span>':''}</div>
         <div class="ci-sub">${GAME_LABEL[c.game]||c.game} · <span class="flag">${flagFor(c.language)}</span>${escapeHtml(c.set_name||'')}${ref?` · <b>${escapeHtml(ref)}</b>`:''} · Zustand ${escapeHtml(c.condition||'–')}</div>
-        <div class="ci-sub">von <span data-act="profile" data-uid="${escapeHtml(c.seller_id||'')}" style="cursor:pointer;border-bottom:1px dotted var(--muted)" title="Profil ansehen">${cflag?cflag+' ':''}<b>${escapeHtml(c.seller_name||'Sammler')}</b>${c.seller_verified?' 🛡️':''}${c.seller_rating!=null?` <span style="color:var(--gold)">★ ${Number(c.seller_rating).toFixed(1)}</span> <small>(${c.seller_rating_count})</small>`:''}</span></div>
+        <div class="ci-sub">von <span data-act="profile" data-uid="${escapeHtml(c.seller_id||'')}" style="cursor:pointer;border-bottom:1px dotted var(--muted)" title="Profil ansehen">${cflag?cflag+' ':''}<b>${escapeHtml(c.seller_name||'Sammler')}</b>${c.seller_verified?' 🛡️':''}${c.seller_rating!=null?` <span style="color:var(--gold)">★ ${Number(c.seller_rating).toFixed(1)}</span> <small>(${c.seller_rating_count})</small>`:''}${c.seller_trades?` · <small title="abgeschlossene Trades">🔄 ${c.seller_trades}</small>`:''}</span></div>
       </div>
       <div class="ci-spacer"></div>
       <div class="ci-prices"><div class="ci-price" style="cursor:default">${price}</div></div>
-      ${(!c.is_mine && c.seller_id) ? '<button class="wtocoll" data-act="msg" title="Dem Verkäufer eine Nachricht schreiben">✉ Anschreiben</button>' : ''}
+      ${(!c.is_mine && c.seller_id) ? '<button class="wtocoll" data-act="trade" title="Kauf/Tausch anfragen – der Anbieter kann annehmen oder ablehnen">🔄 Trade</button><button class="wtocoll" data-act="msg" title="Dem Verkäufer eine Nachricht schreiben">✉</button>' : ''}
     </div>`;
   }).join('');
   bindWishOnly();
@@ -1980,9 +2001,10 @@ function bindWishOnly() {
 document.getElementById('community-list').addEventListener('click', e=>{
   const prof = e.target.closest('[data-act="profile"]');
   if (prof && prof.dataset.uid) { openProfile(prof.dataset.uid); return; }
-  const btn = e.target.closest('[data-act="msg"]'); if (!btn) return;
   const item = e.target.closest('.collection-item'); if (!item) return;
-  openMsgModal(item.dataset.sid, item.dataset.sname, item.dataset.cname);
+  const act = e.target.closest('[data-act]')?.dataset.act;
+  if (act === 'msg') openMsgModal(item.dataset.sid, item.dataset.sname, item.dataset.cname);
+  else if (act === 'trade') openTradeModal(item.dataset);
 });
 document.getElementById('cm-chips').addEventListener('click', e=>{
   const chip = e.target.closest('.chip'); if(!chip) return;
@@ -2023,10 +2045,14 @@ document.getElementById('mm-send').addEventListener('click', async ()=>{
 
 async function refreshUnread() {
   try {
-    const d = await (await fetch('api/messages/unread')).json();
-    const n = d.count || 0;
-    const nav = document.getElementById('cm-nav-unread'); if (nav) nav.textContent = n ? `(${n})` : '';
-    const tab = document.getElementById('cm-unread-tab'); if (tab) tab.textContent = n ? `(${n})` : '';
+    const [md, td] = await Promise.all([
+      fetch('api/messages/unread').then(r=>r.json()).catch(()=>({count:0})),
+      fetch('api/trades/open-count').then(r=>r.json()).catch(()=>({count:0})),
+    ]);
+    const m = md.count || 0, t = td.count || 0;
+    const nav = document.getElementById('cm-nav-unread'); if (nav) nav.textContent = (m + t) ? `(${m + t})` : '';
+    const tab = document.getElementById('cm-unread-tab'); if (tab) tab.textContent = m ? `(${m})` : '';
+    const tt = document.getElementById('cm-trades-tab'); if (tt) tt.textContent = t ? `(${t})` : '';
   } catch {}
 }
 
@@ -2068,6 +2094,106 @@ document.getElementById('community-inbox').addEventListener('click', async e=>{
     if (!confirm('Nachricht wirklich löschen?')) return;
     await fetch('api/messages/'+item.dataset.mid, { method:'DELETE' });
     loadInbox();
+  }
+});
+
+// ---- Trades (Tauschgeschaefte) ----
+let tradeCtx = null;
+function openTradeModal(ds) {
+  if (!ds.sid) return;
+  tradeCtx = { responder: ds.sid, cardId: ds.cid ? Number(ds.cid) : null, cardName: ds.cname, cardGame: ds.game || null, currency: ds.cur || 'EUR' };
+  document.getElementById('tr-title').textContent = 'Trade anfragen: ' + ds.cname;
+  document.getElementById('tr-sub').textContent = 'Anbieter: ' + (ds.sname || 'Sammler');
+  document.getElementById('tr-price').value = ds.price ? String(ds.price).replace('.', ',') : '';
+  document.getElementById('tr-msg').value = '';
+  document.getElementById('trade-modal').classList.add('open');
+}
+function closeTradeModal() { document.getElementById('trade-modal').classList.remove('open'); tradeCtx = null; }
+document.getElementById('tr-cancel').addEventListener('click', closeTradeModal);
+document.getElementById('trade-modal').addEventListener('click', e=>{ if (e.target.id==='trade-modal') closeTradeModal(); });
+document.getElementById('tr-send').addEventListener('click', async ()=>{
+  if (!tradeCtx) return;
+  const b = document.getElementById('tr-send'); b.disabled = true; b.textContent = 'Sende…';
+  try {
+    const priceRaw = document.getElementById('tr-price').value.trim().replace(',', '.');
+    const price = priceRaw === '' ? null : parseFloat(priceRaw);
+    const r = await fetch('api/trades', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ ...tradeCtx, price: (price != null && Number.isFinite(price)) ? price : null,
+        message: document.getElementById('tr-msg').value.trim() || null }) });
+    const d = await r.json().catch(()=>({}));
+    if (!r.ok) { alert('Anfrage fehlgeschlagen: ' + (d.error || ('HTTP ' + r.status))); return; }
+    closeTradeModal();
+    cmShowTab('trades');
+  } finally { b.disabled = false; b.textContent = 'Anfrage senden'; }
+});
+
+function tradeStatusChip(status) {
+  const map = { angefragt:['⏳ angefragt','var(--gold)'], angenommen:['🤝 angenommen','#5bd08a'],
+    abgeschlossen:['✔ abgeschlossen','#5bd08a'], abgelehnt:['✕ abgelehnt','#e06a6a'], abgebrochen:['✕ abgebrochen','#e06a6a'] };
+  const [label, color] = map[status] || [status, 'var(--muted)'];
+  return `<span style="color:${color};font-weight:700;font-size:.78rem;white-space:nowrap">${label}</span>`;
+}
+async function loadTrades() {
+  const el = document.getElementById('community-trades');
+  el.innerHTML = '<div class="empty">Lade Trades…</div>';
+  let items = [];
+  try {
+    const r = await fetch('api/trades');
+    const d = await r.json();
+    if (!r.ok) { el.innerHTML = `<div class="empty">${escapeHtml(d.error || 'Fehler beim Laden.')}</div>`; return; }
+    items = d.items || [];
+  } catch { el.innerHTML = '<div class="empty">Fehler beim Laden.</div>'; return; }
+  if (!items.length) { el.innerHTML = '<div class="empty">Noch keine Trades. Frag bei einem Angebot über „🔄 Trade" an.</div>'; return; }
+  el.innerHTML = items.map(t => {
+    const partnerName = t.i_am_proposer ? t.responder_name : t.proposer_name;
+    const partnerId = t.i_am_proposer ? t.responder : t.proposer;
+    const myDone = t.i_am_proposer ? t.proposer_done : t.responder_done;
+    const otherDone = t.i_am_proposer ? t.responder_done : t.proposer_done;
+    const btns = [];
+    if (t.status === 'angefragt') {
+      if (t.i_am_proposer) btns.push('<button class="ci-del" data-act="t-cancel">Zurückziehen</button>');
+      else { btns.push('<button class="wtocoll" data-act="t-accept">✔ Annehmen</button>'); btns.push('<button class="ci-del" data-act="t-decline">Ablehnen</button>'); }
+    } else if (t.status === 'angenommen') {
+      if (!myDone) btns.push('<button class="wtocoll" data-act="t-done">✔ Abschluss bestätigen</button>');
+      else btns.push('<span class="msub" style="white-space:nowrap">wartet auf Partner…</span>');
+      btns.push('<button class="ci-del" data-act="t-cancel" title="Trade abbrechen">✕</button>');
+    }
+    return `
+    <div class="collection-item" data-id="${t.id}" data-uid="${escapeHtml(partnerId||'')}" data-uname="${escapeHtml(partnerName||'Sammler')}">
+      <div class="ci-main">
+        <div class="ci-name">${escapeHtml(t.card_name)} ${tradeStatusChip(t.status)}</div>
+        <div class="ci-sub">${t.i_am_proposer ? 'Angefragt bei' : 'Anfrage von'} <span data-act="t-profile" style="cursor:pointer;border-bottom:1px dotted var(--muted)">${escapeHtml(partnerName||'Sammler')}</span>${t.price != null ? ` · ${fmt(t.price, t.currency||'EUR')}` : ''}${t.card_game && GAME_LABEL[t.card_game] ? ` · ${GAME_LABEL[t.card_game]}` : ''}</div>
+        ${t.message ? `<div class="ci-sub" style="white-space:pre-wrap">„${escapeHtml(t.message)}"</div>` : ''}
+        <div class="ci-sub">${new Date(t.updated_at).toLocaleString('de-DE')}${t.status==='angenommen' ? ` · Bestätigt: du ${myDone?'✔':'–'} / Partner ${otherDone?'✔':'–'}` : ''}</div>
+      </div>
+      <div class="ci-spacer"></div>
+      ${btns.join(' ')}
+    </div>`;
+  }).join('');
+}
+document.getElementById('community-trades').addEventListener('click', async e=>{
+  const item = e.target.closest('.collection-item'); if (!item) return;
+  const act = e.target.closest('[data-act]')?.dataset.act;
+  if (!act) return;
+  const id = Number(item.dataset.id);
+  const send = async (body) => {
+    const r = await fetch('api/trades/'+id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const d = await r.json().catch(()=>({}));
+    if (!r.ok) alert(d.error || 'Aktion fehlgeschlagen.');
+    loadTrades(); refreshUnread();
+  };
+  if (act==='t-profile') openProfile(item.dataset.uid);
+  else if (act==='t-accept') send({ status: 'angenommen' });
+  else if (act==='t-decline') { if (confirm('Anfrage wirklich ablehnen?')) send({ status: 'abgelehnt' }); }
+  else if (act==='t-cancel') { if (confirm('Trade wirklich abbrechen/zurückziehen?')) send({ status: 'abgebrochen' }); }
+  else if (act==='t-done') {
+    // eigenen Bestaetigungs-Haken setzen -- die Datenbank schliesst den Trade
+    // automatisch ab, sobald beide bestaetigt haben
+    const t = { proposer_done: undefined, responder_done: undefined };
+    const r = await fetch('api/trades'); const d = await r.json().catch(()=>({items:[]}));
+    const row = (d.items||[]).find(x => x.id === id);
+    if (!row) return;
+    send(row.i_am_proposer ? { proposer_done: true } : { responder_done: true });
   }
 });
 
@@ -2153,6 +2279,9 @@ async function openProfile(userId) {
   document.getElementById('profile-modal').classList.add('open');
   document.getElementById('pf-name').textContent = 'Lade Profil…';
   ['pf-meta','pf-badges','pf-stats','pf-bio','pf-contact','pf-ratings','pf-rate-status'].forEach(id => { document.getElementById(id).innerHTML = ''; });
+  // Aktions-Bereiche erst zeigen, wenn das Profil wirklich geladen ist
+  document.getElementById('pf-msg').style.display = 'none';
+  document.getElementById('pf-rate-box').style.display = 'none';
   let d;
   try {
     const r = await fetch('api/profile/' + encodeURIComponent(userId));
@@ -2171,8 +2300,12 @@ async function openProfile(userId) {
   document.getElementById('pf-badges').innerHTML = profileBadges(p)
     .map(b => `<span class="gchip" style="cursor:default" title="${escapeHtml(BADGE_DEFS[b][1])}">${BADGE_DEFS[b][0]} ${escapeHtml(BADGE_DEFS[b][1])}</span>`).join('')
     || '<span class="msub">Noch keine Abzeichen.</span>';
-  const stat = (k, v) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`;
+  const stat = (k, v, sub) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div>${sub?`<div class="sub">${sub}</div>`:''}</div>`;
+  const tDone = p.trades_done || 0, tCanc = p.trades_cancelled || 0;
+  const quote = (tDone + tCanc) > 0 ? Math.round(tDone / (tDone + tCanc) * 100) + ' %' : '–';
+  const byGame = (p.trades_by_game || []).map(x => `${x.n}× ${GAME_LABEL[x.game] || x.game || '?'}`).join(' · ');
   document.getElementById('pf-stats').innerHTML =
+    stat('Trades', tDone, byGame || '') + stat('Erfolgsquote', quote, tCanc ? `${tCanc} abgebrochen` : '') +
     stat('Rang', p.rank ? '#' + p.rank : '–') + stat('Punkte', p.points ?? 0) +
     stat('Angebote', p.active_offers ?? 0) + stat('Verkäufe', p.sold_count ?? 0);
   document.getElementById('pf-bio').textContent = p.bio || '';

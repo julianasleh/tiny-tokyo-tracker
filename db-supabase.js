@@ -539,6 +539,38 @@
     return must(await getClient().from('leaderboard').select('*'));
   }
 
+  // --- Trades (Tauschgeschaefte) ---------------------------------------------
+  async function listTrades() {
+    return must(await getClient().from('trades_view').select('*').order('updated_at', { ascending: false }).limit(200));
+  }
+  async function createTrade(t) {
+    const uid = await requireUserId();
+    const row = {
+      proposer: uid, responder: t.responder,
+      card_id: t.cardId ?? null, card_name: t.cardName, card_game: t.cardGame ?? null,
+      price: t.price ?? null, currency: t.currency || 'EUR', message: t.message ?? null,
+    };
+    const { error } = await getClient().from('trades').insert(row);
+    if (error) throw new Error(error.message);
+    return true;
+  }
+  async function updateTrade(id, fields) {
+    const allowed = ['status', 'proposer_done', 'responder_done', 'price'];
+    const patch = {};
+    for (const k of allowed) if (fields[k] !== undefined) patch[k] = fields[k];
+    if (!Object.keys(patch).length) throw new Error('Nichts zu ändern');
+    const { data, error } = await getClient().from('trades').update(patch).eq('id', id).select().single();
+    if (error) throw new Error(error.message);
+    return data;
+  }
+  async function openTradesCount() {
+    const uid = await requireUserId();
+    const { count, error } = await getClient().from('trades')
+      .select('id', { count: 'exact', head: true }).eq('responder', uid).eq('status', 'angefragt');
+    if (error) throw new Error(error.message);
+    return count || 0;
+  }
+
   // --- Nutzer-Profile + Bewertungen -----------------------------------------
   async function getProfile(userId) {
     const { data, error } = await getClient().from('profiles').select('*').eq('user_id', userId).maybeSingle();
@@ -566,6 +598,7 @@
     getSetting, setSetting, listMarket,
     listMessages, unreadMessages, sendMessage, markMessagesRead, deleteMessage, leaderboard,
     getProfile, listRatings, rateUser, deleteRating,
+    listTrades, createTrade, updateTrade, openTradesCount,
     listCards, addCard, updateCard, deleteCard, allForRefresh,
     listSold, soldForRefresh, soldTotals,
     computeTotals, recordSnapshot, getHistory, getCardHistory,

@@ -413,6 +413,38 @@
     try { return ok({ ok: await D.deleteMessage(Number(params.id)) }); }
     catch (e) { return bad(502, { error: String((e && e.message) || e) }); }
   });
+  // --- Trades (Tauschgeschaefte) --------------------------------------------------
+  const SQL4_HINT = 'Bitte zuerst supabase-community-4.sql im Supabase-SQL-Editor ausführen.';
+  route('GET', '/api/trades/open-count', async () => {
+    try { return ok({ count: await D.openTradesCount() }); } catch { return ok({ count: 0 }); }
+  });
+  route('GET', '/api/trades', async () => {
+    try { return ok({ items: await D.listTrades() }); }
+    catch (e) { return bad(503, { error: 'Trade-System noch nicht eingerichtet. ' + SQL4_HINT, detail: String((e && e.message) || e) }); }
+  });
+  route('POST', '/api/trades', async ({ body }) => {
+    const b = body || {};
+    if (!b.responder || !b.cardName) return bad(400, { error: 'Anbieter und Kartenname sind nötig' });
+    const price = b.price != null ? Number(b.price) : null;
+    if (price != null && !(Number.isFinite(price) && price >= 0)) return bad(400, { error: 'Ungültiger Preis' });
+    try {
+      await D.createTrade({
+        responder: String(b.responder), cardId: b.cardId != null ? Number(b.cardId) : null,
+        cardName: String(b.cardName), cardGame: b.cardGame != null ? String(b.cardGame) : null,
+        price, currency: b.currency === 'USD' ? 'USD' : 'EUR',
+        message: b.message != null ? String(b.message).slice(0, 1000) : null,
+      });
+      return ok({ ok: true }, 201);
+    } catch (e) {
+      const msg = String((e && e.message) || e);
+      return bad(502, { error: /relation|schema|trades/i.test(msg) ? ('Trade-System noch nicht eingerichtet. ' + SQL4_HINT) : msg });
+    }
+  });
+  route('PATCH', '/api/trades/:id', async ({ params, body }) => {
+    try { return ok({ trade: await D.updateTrade(Number(params.id), body || {}) }); }
+    catch (e) { return bad(502, { error: String((e && e.message) || e) }); }
+  });
+
   // --- Nutzer-Profile + Bewertungen ---------------------------------------------
   route('GET', '/api/profile/:id', async ({ params }) => {
     try {
