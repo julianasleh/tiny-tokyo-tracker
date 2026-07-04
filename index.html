@@ -941,17 +941,48 @@
     <div class="row" style="gap:8px;margin-bottom:12px">
       <button id="pf-msg">✉ Nachricht senden</button>
     </div>
-    <div class="info-card" id="pf-rate-box" style="padding:14px 16px;margin-bottom:0">
-      <h3 style="font-size:.95rem;margin:0 0 8px">Diesen Sammler bewerten</h3>
-      <div class="row" id="pf-stars" style="gap:4px;font-size:1.5rem;cursor:pointer;user-select:none"></div>
-      <input type="text" id="pf-comment" maxlength="500" placeholder="Kommentar (optional), z. B. „Schneller Versand!“" style="width:100%;margin-top:10px" />
-      <div class="mactions" style="margin-top:10px">
-        <button class="ghost" id="pf-rate-del" style="display:none">Bewertung löschen</button>
-        <button id="pf-rate-save">Bewertung speichern</button>
-      </div>
-      <p class="msub" id="pf-rate-status" style="min-height:1.2em;margin:6px 0 0"></p>
-    </div>
+    <div id="pf-fb-summary"></div>
     <div id="pf-ratings"></div>
+  </div>
+</div>
+
+<!-- Trade-Feedback abgeben -->
+<div class="modal-bg" id="fb-modal">
+  <div class="modal">
+    <h3 id="fb-title">Trade bewerten</h3>
+    <div class="msub" id="fb-sub"></div>
+    <div class="field"><label>Empfehlung</label>
+      <div class="row" style="gap:8px">
+        <button class="chip" id="fb-rec-yes" type="button">👍 Würde wieder tauschen</button>
+        <button class="chip" id="fb-rec-no" type="button">👎 Würde nicht mehr tauschen</button>
+      </div>
+    </div>
+    <div class="field"><label>Gesamtbewertung</label>
+      <div class="row fb-stars" data-cat="stars" style="gap:4px;font-size:1.5rem;cursor:pointer;user-select:none"></div>
+    </div>
+    <div class="field"><label>Details (optional)</label>
+      <div class="row" style="gap:10px;flex-wrap:wrap;font-size:1.1rem">
+        <span class="msub" style="width:118px">Kommunikation</span><span class="fb-stars" data-cat="komm" style="cursor:pointer;user-select:none"></span>
+      </div>
+      <div class="row" style="gap:10px;flex-wrap:wrap;font-size:1.1rem">
+        <span class="msub" style="width:118px">Verpackung</span><span class="fb-stars" data-cat="verp" style="cursor:pointer;user-select:none"></span>
+      </div>
+      <div class="row" style="gap:10px;flex-wrap:wrap;font-size:1.1rem">
+        <span class="msub" style="width:118px">Versand</span><span class="fb-stars" data-cat="vers" style="cursor:pointer;user-select:none"></span>
+      </div>
+      <div class="row" style="gap:10px;flex-wrap:wrap;font-size:1.1rem">
+        <span class="msub" style="width:118px">Kartenzustand</span><span class="fb-stars" data-cat="zust" style="cursor:pointer;user-select:none"></span>
+      </div>
+    </div>
+    <div class="field"><label>Kommentar (optional)</label>
+      <input type="text" id="fb-comment" maxlength="500" placeholder="z. B. „Top verpackt, schneller Versand!“" />
+    </div>
+    <div class="mactions">
+      <button class="ghost" id="fb-del" style="display:none">Feedback löschen</button>
+      <button class="ghost" id="fb-cancel">Abbrechen</button>
+      <button id="fb-save">Speichern</button>
+    </div>
+    <p class="msub" id="fb-status" style="min-height:1.2em;margin:6px 0 0"></p>
   </div>
 </div>
 
@@ -1985,7 +2016,7 @@ function renderCommunity() {
       <div class="ci-main">
         <div class="ci-name">${escapeHtml(c.name)}${c.quantity>1?` ×${c.quantity}`:''}${c.is_mine?'<span class="badge-target">dein Angebot</span>':''}${isWishMatch(c)?'<span class="badge-target">🎯 Wunschliste</span>':''}</div>
         <div class="ci-sub">${GAME_LABEL[c.game]||c.game} · <span class="flag">${flagFor(c.language)}</span>${escapeHtml(c.set_name||'')}${ref?` · <b>${escapeHtml(ref)}</b>`:''} · Zustand ${escapeHtml(c.condition||'–')}</div>
-        <div class="ci-sub">von <span data-act="profile" data-uid="${escapeHtml(c.seller_id||'')}" style="cursor:pointer;border-bottom:1px dotted var(--muted)" title="Profil ansehen">${cflag?cflag+' ':''}<b>${escapeHtml(c.seller_name||'Sammler')}</b>${c.seller_verified?' 🛡️':''}${c.seller_rating!=null?` <span style="color:var(--gold)">★ ${Number(c.seller_rating).toFixed(1)}</span> <small>(${c.seller_rating_count})</small>`:''}${c.seller_trades?` · <small title="abgeschlossene Trades">🔄 ${c.seller_trades}</small>`:''}</span></div>
+        <div class="ci-sub">von <span data-act="profile" data-uid="${escapeHtml(c.seller_id||'')}" style="cursor:pointer;border-bottom:1px dotted var(--muted)" title="Profil ansehen">${cflag?cflag+' ':''}<b>${escapeHtml(c.seller_name||'Sammler')}</b>${c.seller_verified?' 🛡️':''}${c.seller_fb_count?` <span style="color:var(--gold)">★ ${Number(c.seller_fb_avg).toFixed(1)}</span> <small>(${c.seller_fb_count} Feedback)</small>`:(c.seller_rating!=null?` <span style="color:var(--gold)">★ ${Number(c.seller_rating).toFixed(1)}</span> <small>(${c.seller_rating_count})</small>`:'')}${c.seller_trades?` · <small title="abgeschlossene Trades">🔄 ${c.seller_trades}</small>`:''}</span></div>
       </div>
       <div class="ci-spacer"></div>
       <div class="ci-prices"><div class="ci-price" style="cursor:default">${price}</div></div>
@@ -2133,16 +2164,20 @@ function tradeStatusChip(status) {
   const [label, color] = map[status] || [status, 'var(--muted)'];
   return `<span style="color:${color};font-weight:700;font-size:.78rem;white-space:nowrap">${label}</span>`;
 }
+let lastTrades = [];
+let myFbTrades = new Set();
 async function loadTrades() {
   const el = document.getElementById('community-trades');
   el.innerHTML = '<div class="empty">Lade Trades…</div>';
   let items = [];
   try {
-    const r = await fetch('api/trades');
+    const [r, fr] = await Promise.all([fetch('api/trades'), fetch('api/trades/feedback-mine')]);
     const d = await r.json();
     if (!r.ok) { el.innerHTML = `<div class="empty">${escapeHtml(d.error || 'Fehler beim Laden.')}</div>`; return; }
     items = d.items || [];
+    try { const fd = await fr.json(); myFbTrades = new Set(fd.tradeIds || []); } catch { myFbTrades = new Set(); }
   } catch { el.innerHTML = '<div class="empty">Fehler beim Laden.</div>'; return; }
+  lastTrades = items;
   if (!items.length) { el.innerHTML = '<div class="empty">Noch keine Trades. Frag bei einem Angebot über „🔄 Trade" an.</div>'; return; }
   el.innerHTML = items.map(t => {
     const partnerName = t.i_am_proposer ? t.responder_name : t.proposer_name;
@@ -2157,6 +2192,10 @@ async function loadTrades() {
       if (!myDone) btns.push('<button class="wtocoll" data-act="t-done">✔ Abschluss bestätigen</button>');
       else btns.push('<span class="msub" style="white-space:nowrap">wartet auf Partner…</span>');
       btns.push('<button class="ci-del" data-act="t-cancel" title="Trade abbrechen">✕</button>');
+    } else if (t.status === 'abgeschlossen') {
+      btns.push(myFbTrades.has(t.id)
+        ? '<button class="wtocoll" data-act="t-feedback" title="Dein Feedback ändern oder löschen">✎ Feedback</button>'
+        : '<button class="wtocoll" data-act="t-feedback" title="Den Partner bewerten">⭐ Bewerten</button>');
     }
     return `
     <div class="collection-item" data-id="${t.id}" data-uid="${escapeHtml(partnerId||'')}" data-uname="${escapeHtml(partnerName||'Sammler')}">
@@ -2182,19 +2221,75 @@ document.getElementById('community-trades').addEventListener('click', async e=>{
     if (!r.ok) alert(d.error || 'Aktion fehlgeschlagen.');
     loadTrades(); refreshUnread();
   };
+  const row = lastTrades.find(x => x.id === id);
   if (act==='t-profile') openProfile(item.dataset.uid);
   else if (act==='t-accept') send({ status: 'angenommen' });
   else if (act==='t-decline') { if (confirm('Anfrage wirklich ablehnen?')) send({ status: 'abgelehnt' }); }
   else if (act==='t-cancel') { if (confirm('Trade wirklich abbrechen/zurückziehen?')) send({ status: 'abgebrochen' }); }
-  else if (act==='t-done') {
+  else if (act==='t-done' && row) {
     // eigenen Bestaetigungs-Haken setzen -- die Datenbank schliesst den Trade
     // automatisch ab, sobald beide bestaetigt haben
-    const t = { proposer_done: undefined, responder_done: undefined };
-    const r = await fetch('api/trades'); const d = await r.json().catch(()=>({items:[]}));
-    const row = (d.items||[]).find(x => x.id === id);
-    if (!row) return;
     send(row.i_am_proposer ? { proposer_done: true } : { responder_done: true });
   }
+  else if (act==='t-feedback' && row) openFbModal(row);
+});
+
+// ---- Trade-Feedback (nur nach abgeschlossenem Trade) ----
+let fbCtx = null;
+const fbVals = { stars: 0, komm: 0, verp: 0, vers: 0, zust: 0 };
+let fbRec = null;
+function paintFbStars() {
+  document.querySelectorAll('#fb-modal .fb-stars').forEach(el => {
+    const cat = el.dataset.cat === 'stars' ? 'stars' : el.dataset.cat;
+    const v = fbVals[cat] || 0;
+    el.innerHTML = [1,2,3,4,5].map(i => `<span data-star="${i}" style="color:${i <= v ? 'var(--gold)' : 'var(--muted)'}">${i <= v ? '★' : '☆'}</span>`).join('');
+  });
+  document.getElementById('fb-rec-yes').classList.toggle('active', fbRec === true);
+  document.getElementById('fb-rec-no').classList.toggle('active', fbRec === false);
+}
+function openFbModal(t) {
+  fbCtx = t;
+  const partner = t.i_am_proposer ? t.responder_name : t.proposer_name;
+  document.getElementById('fb-title').textContent = 'Trade bewerten: ' + t.card_name;
+  document.getElementById('fb-sub').textContent = 'Dein Feedback für ' + (partner || 'Sammler') + (myFbTrades.has(t.id) ? ' – überschreibt dein bisheriges Feedback.' : '');
+  fbVals.stars = 0; fbVals.komm = 0; fbVals.verp = 0; fbVals.vers = 0; fbVals.zust = 0; fbRec = null;
+  document.getElementById('fb-comment').value = '';
+  document.getElementById('fb-status').textContent = '';
+  document.getElementById('fb-del').style.display = myFbTrades.has(t.id) ? '' : 'none';
+  paintFbStars();
+  document.getElementById('fb-modal').classList.add('open');
+}
+document.getElementById('fb-modal').addEventListener('click', e => {
+  if (e.target.id === 'fb-modal') { document.getElementById('fb-modal').classList.remove('open'); return; }
+  const star = e.target.closest('[data-star]');
+  if (star) {
+    const box = e.target.closest('.fb-stars');
+    fbVals[box.dataset.cat] = Number(star.dataset.star);
+    paintFbStars();
+  }
+});
+document.getElementById('fb-rec-yes').addEventListener('click', () => { fbRec = true; paintFbStars(); });
+document.getElementById('fb-rec-no').addEventListener('click', () => { fbRec = false; paintFbStars(); });
+document.getElementById('fb-cancel').addEventListener('click', () => document.getElementById('fb-modal').classList.remove('open'));
+document.getElementById('fb-save').addEventListener('click', async () => {
+  if (!fbCtx) return;
+  const status = document.getElementById('fb-status');
+  if (fbRec == null) { status.textContent = 'Bitte 👍 oder 👎 wählen.'; return; }
+  if (!fbVals.stars) { status.textContent = 'Bitte eine Gesamtbewertung (Sterne) anklicken.'; return; }
+  const r = await fetch('api/trades/' + fbCtx.id + '/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ recommend: fbRec, stars: fbVals.stars, comment: document.getElementById('fb-comment').value.trim() || null,
+      catKommunikation: fbVals.komm || null, catVerpackung: fbVals.verp || null, catVersand: fbVals.vers || null, catZustand: fbVals.zust || null }) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { status.textContent = d.error || 'Fehler beim Speichern.'; return; }
+  document.getElementById('fb-modal').classList.remove('open');
+  loadTrades();
+});
+document.getElementById('fb-del').addEventListener('click', async () => {
+  if (!fbCtx) return;
+  if (!confirm('Dein Feedback zu diesem Trade wirklich löschen?')) return;
+  await fetch('api/trades/' + fbCtx.id + '/feedback', { method: 'DELETE' });
+  document.getElementById('fb-modal').classList.remove('open');
+  loadTrades();
 });
 
 // ---- Punkte-Rangliste ----
@@ -2278,23 +2373,22 @@ async function openProfile(userId) {
   if (!userId) return;
   document.getElementById('profile-modal').classList.add('open');
   document.getElementById('pf-name').textContent = 'Lade Profil…';
-  ['pf-meta','pf-badges','pf-stats','pf-bio','pf-contact','pf-ratings','pf-rate-status'].forEach(id => { document.getElementById(id).innerHTML = ''; });
-  // Aktions-Bereiche erst zeigen, wenn das Profil wirklich geladen ist
+  ['pf-meta','pf-badges','pf-stats','pf-bio','pf-contact','pf-fb-summary','pf-ratings'].forEach(id => { document.getElementById(id).innerHTML = ''; });
   document.getElementById('pf-msg').style.display = 'none';
-  document.getElementById('pf-rate-box').style.display = 'none';
-  let d;
+  let d, fb = [];
   try {
     const r = await fetch('api/profile/' + encodeURIComponent(userId));
     d = await r.json();
     if (!r.ok) { document.getElementById('pf-name').textContent = 'Profil'; document.getElementById('pf-meta').textContent = d.error || 'Fehler beim Laden.'; return; }
+    try { const fr = await fetch('api/feedback/' + encodeURIComponent(userId)); const fd = await fr.json(); if (fr.ok) fb = fd.items || []; } catch {}
   } catch { document.getElementById('pf-name').textContent = 'Profil'; document.getElementById('pf-meta').textContent = 'Fehler beim Laden.'; return; }
   const p = d.profile;
   profileUser = p;
   const flag = countryFlag(p.country);
   document.getElementById('pf-name').textContent = `${flag ? flag + ' ' : ''}${p.name || 'Sammler'}`;
   const meta = [];
-  if (p.rating_count) meta.push(`★ ${Number(p.rating_avg).toFixed(1)} · ${p.rating_count} Bewertung${p.rating_count === 1 ? '' : 'en'}`);
-  else meta.push('Noch keine Bewertungen');
+  if (p.fb_count) meta.push(`★ ${Number(p.fb_avg).toFixed(2)} · ${p.fb_count} Feedback`);
+  else meta.push('Noch kein Trade-Feedback');
   if (p.member_since) meta.push('Dabei seit ' + new Date(p.member_since).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }));
   document.getElementById('pf-meta').textContent = meta.join('  ·  ');
   document.getElementById('pf-badges').innerHTML = profileBadges(p)
@@ -2311,44 +2405,25 @@ async function openProfile(userId) {
   document.getElementById('pf-bio').textContent = p.bio || '';
   document.getElementById('pf-contact').innerHTML = p.contact ? ('Kontakt: <b>' + escapeHtml(p.contact) + '</b>') : '<span class="msub">Keine Kontaktinfo hinterlegt.</span>';
   document.getElementById('pf-msg').style.display = p.is_me ? 'none' : '';
-  document.getElementById('pf-rate-box').style.display = p.is_me ? 'none' : '';
-  const ratings = d.ratings || [];
-  document.getElementById('pf-ratings').innerHTML = ratings.length
-    ? '<div class="an-card" style="margin:12px 0 0"><h3>Bewertungen</h3>' + ratings.map(r2 => `
-      <div class="top-row"><span class="nm"><span style="color:var(--gold)">${renderStarRow(r2.stars)}</span> <b>${escapeHtml(r2.rater_name || 'Sammler')}</b>${r2.is_mine ? ' <small>(deine)</small>' : ''}${r2.comment ? `<br><small>${escapeHtml(r2.comment)}</small>` : ''}</span>
-      <small style="color:var(--muted)">${new Date(r2.created_at).toLocaleDateString('de-DE')}</small></div>`).join('') + '</div>'
+  // Feedback-Uebersicht (Cardmarket-Stil)
+  const catRow = (label, v) => v ? `<div class="bar-row"><span class="lab">${label}</span><span style="color:var(--gold)">${renderStarRow(Math.round(v))}</span> <small style="color:var(--muted)">${Number(v).toFixed(1)}</small></div>` : '';
+  document.getElementById('pf-fb-summary').innerHTML = p.fb_count ? `
+    <div class="an-card" style="margin:0 0 12px"><h3>Trade-Feedback</h3>
+      <div class="row" style="gap:16px;flex-wrap:wrap;margin-bottom:8px">
+        <span style="color:#5bd08a">Positiv <b>${p.fb_pos || 0}</b></span>
+        <span style="color:var(--muted)">Neutral <b>${p.fb_neutral || 0}</b></span>
+        <span style="color:#e06a6a">Negativ <b>${p.fb_neg || 0}</b></span>
+        ${p.fb_recommend_pct != null ? `<span>👍 <b>${Math.round(p.fb_recommend_pct)} %</b> würden wieder tauschen</span>` : ''}
+      </div>
+      ${catRow('Kommunikation', p.fb_kommunikation)}${catRow('Verpackung', p.fb_verpackung)}${catRow('Versand', p.fb_versand)}${catRow('Kartenzustand', p.fb_zustand)}
+    </div>` : '<p class="msub">Noch kein Trade-Feedback. Feedback gibt es erst nach einem abgeschlossenen Trade – so bleibt es fälschungssicher.</p>';
+  // Einzelne Feedbacks
+  document.getElementById('pf-ratings').innerHTML = fb.length
+    ? '<div class="an-card" style="margin:0"><h3>Letzte Bewertungen</h3>' + fb.map(f => `
+      <div class="top-row"><span class="nm">${f.recommend ? '👍' : '👎'} <span style="color:var(--gold)">${renderStarRow(f.stars)}</span> <b>${escapeHtml(f.rater_name || 'Sammler')}</b>${f.card_name ? ` <small style="color:var(--muted)">· ${escapeHtml(f.card_name)}</small>` : ''}${f.is_mine ? ' <small>(deins)</small>' : ''}${f.comment ? `<br><small>${escapeHtml(f.comment)}</small>` : ''}</span>
+      <small style="color:var(--muted)">${new Date(f.created_at).toLocaleDateString('de-DE')}</small></div>`).join('') + '</div>'
     : '';
-  const mine = ratings.find(r2 => r2.is_mine);
-  pfStars = mine ? mine.stars : 0;
-  document.getElementById('pf-comment').value = (mine && mine.comment) ? mine.comment : '';
-  document.getElementById('pf-rate-del').style.display = mine ? '' : 'none';
-  paintStars();
 }
-function paintStars() {
-  document.getElementById('pf-stars').innerHTML = [1,2,3,4,5].map(i =>
-    `<span data-star="${i}" style="color:${i <= pfStars ? 'var(--gold)' : 'var(--muted)'}">${i <= pfStars ? '★' : '☆'}</span>`).join('');
-}
-document.getElementById('pf-stars').addEventListener('click', e => {
-  const st = e.target.closest('[data-star]'); if (!st) return;
-  pfStars = Number(st.dataset.star); paintStars();
-});
-document.getElementById('pf-rate-save').addEventListener('click', async () => {
-  const status = document.getElementById('pf-rate-status');
-  if (!profileUser) return;
-  if (!pfStars) { status.textContent = 'Bitte zuerst 1–5 Sterne anklicken.'; return; }
-  const r = await fetch('api/profile/' + encodeURIComponent(profileUser.user_id) + '/rate', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ stars: pfStars, comment: document.getElementById('pf-comment').value.trim() || null }),
-  });
-  const d = await r.json().catch(() => ({}));
-  if (!r.ok) { status.textContent = d.error || 'Fehler beim Speichern.'; return; }
-  openProfile(profileUser.user_id);
-});
-document.getElementById('pf-rate-del').addEventListener('click', async () => {
-  if (!profileUser) return;
-  await fetch('api/profile/' + encodeURIComponent(profileUser.user_id) + '/rate', { method: 'DELETE' });
-  openProfile(profileUser.user_id);
-});
 document.getElementById('pf-msg').addEventListener('click', () => {
   if (!profileUser) return;
   document.getElementById('profile-modal').classList.remove('open');

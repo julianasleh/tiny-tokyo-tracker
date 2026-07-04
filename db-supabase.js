@@ -571,6 +571,33 @@
     return count || 0;
   }
 
+  // --- Trade-Feedback ----------------------------------------------------------
+  async function listFeedback(userId) {
+    return must(await getClient().from('feedback_view').select('*').eq('rated', userId).order('created_at', { ascending: false }).limit(50));
+  }
+  async function listMyFeedbackTradeIds() {
+    const uid = await requireUserId();
+    const rows = must(await getClient().from('trade_feedback').select('trade_id').eq('rater', uid));
+    return rows.map((r) => r.trade_id);
+  }
+  async function giveFeedback(tradeId, f) {
+    const uid = await requireUserId();
+    const row = {
+      trade_id: tradeId, rater: uid, rated: uid, // rated setzt der DB-Trigger auf den Partner
+      recommend: !!f.recommend, stars: f.stars, comment: f.comment ?? null,
+      cat_kommunikation: f.catKommunikation ?? null, cat_verpackung: f.catVerpackung ?? null,
+      cat_versand: f.catVersand ?? null, cat_zustand: f.catZustand ?? null,
+    };
+    const { error } = await getClient().from('trade_feedback').upsert(row, { onConflict: 'trade_id,rater' });
+    if (error) throw new Error(error.message);
+  }
+  async function deleteFeedback(tradeId) {
+    const uid = await requireUserId();
+    const { error, count } = await getClient().from('trade_feedback').delete({ count: 'exact' }).eq('trade_id', tradeId).eq('rater', uid);
+    if (error) throw new Error(error.message);
+    return (count || 0) > 0;
+  }
+
   // --- Nutzer-Profile + Bewertungen -----------------------------------------
   async function getProfile(userId) {
     const { data, error } = await getClient().from('profiles').select('*').eq('user_id', userId).maybeSingle();
@@ -599,6 +626,7 @@
     listMessages, unreadMessages, sendMessage, markMessagesRead, deleteMessage, leaderboard,
     getProfile, listRatings, rateUser, deleteRating,
     listTrades, createTrade, updateTrade, openTradesCount,
+    listFeedback, listMyFeedbackTradeIds, giveFeedback, deleteFeedback,
     listCards, addCard, updateCard, deleteCard, allForRefresh,
     listSold, soldForRefresh, soldTotals,
     computeTotals, recordSnapshot, getHistory, getCardHistory,

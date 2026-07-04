@@ -440,6 +440,37 @@
       return bad(502, { error: /relation|schema|trades/i.test(msg) ? ('Trade-System noch nicht eingerichtet. ' + SQL4_HINT) : msg });
     }
   });
+  route('GET', '/api/trades/feedback-mine', async () => {
+    try { return ok({ tradeIds: await D.listMyFeedbackTradeIds() }); } catch { return ok({ tradeIds: [] }); }
+  });
+  route('POST', '/api/trades/:id/feedback', async ({ params, body }) => {
+    const b = body || {};
+    const stars = parseInt(b.stars);
+    if (!(stars >= 1 && stars <= 5)) return bad(400, { error: 'Gesamtbewertung braucht 1 bis 5 Sterne' });
+    if (typeof b.recommend !== 'boolean') return bad(400, { error: 'Bitte 👍 oder 👎 wählen' });
+    const cat = (v) => { const n = parseInt(v); return (n >= 1 && n <= 5) ? n : null; };
+    try {
+      await D.giveFeedback(Number(params.id), {
+        recommend: b.recommend, stars,
+        comment: b.comment ? String(b.comment).slice(0, 500) : null,
+        catKommunikation: cat(b.catKommunikation), catVerpackung: cat(b.catVerpackung),
+        catVersand: cat(b.catVersand), catZustand: cat(b.catZustand),
+      });
+      return ok({ ok: true }, 201);
+    } catch (e) {
+      const msg = String((e && e.message) || e);
+      return bad(502, { error: /relation|schema/i.test(msg) ? 'Feedback noch nicht eingerichtet. Bitte supabase-community-5.sql im Supabase-SQL-Editor ausführen.' : msg });
+    }
+  });
+  route('DELETE', '/api/trades/:id/feedback', async ({ params }) => {
+    try { return ok({ ok: await D.deleteFeedback(Number(params.id)) }); }
+    catch (e) { return bad(502, { error: String((e && e.message) || e) }); }
+  });
+  route('GET', '/api/feedback/:id', async ({ params }) => {
+    try { return ok({ items: await D.listFeedback(params.id) }); }
+    catch (e) { return bad(503, { error: 'Feedback noch nicht eingerichtet. Bitte supabase-community-5.sql ausführen.' }); }
+  });
+
   route('PATCH', '/api/trades/:id', async ({ params, body }) => {
     try { return ok({ trade: await D.updateTrade(Number(params.id), body || {}) }); }
     catch (e) { return bad(502, { error: String((e && e.message) || e) }); }
