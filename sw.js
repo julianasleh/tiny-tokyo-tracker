@@ -3,7 +3,7 @@
 // selbst beantwortet (siehe window.fetch-Override in index.html) -- der Service
 // Worker muss dafuer nichts mehr tun.
 
-const CACHE_VERSION = 'ttt-shell-v16';
+const CACHE_VERSION = 'ttt-shell-v17';
 const APP_SHELL = [
   './',
   './index.html',
@@ -15,6 +15,14 @@ const APP_SHELL = [
   './manifest.json',
   './lib/supabase.js',
   './lib/xlsx.full.min.js',
+  './legal.html',
+  './lib/fonts/inter-latin-400-normal.woff2',
+  './lib/fonts/inter-latin-500-normal.woff2',
+  './lib/fonts/inter-latin-600-normal.woff2',
+  './lib/fonts/inter-latin-700-normal.woff2',
+  './lib/fonts/space-grotesk-latin-500-normal.woff2',
+  './lib/fonts/space-grotesk-latin-600-normal.woff2',
+  './lib/fonts/space-grotesk-latin-700-normal.woff2',
 ];
 
 self.addEventListener('install', (event) => {

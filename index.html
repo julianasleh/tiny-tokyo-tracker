@@ -12,10 +12,15 @@
 <meta name="apple-mobile-web-app-title" content="Tiny Tokyo" />
 <link rel="apple-touch-icon" href="icon-192.png" />
 <link rel="icon" href="icon-192.png" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
 <style>
+  /* Schriften lokal gehostet (DSGVO: keine Verbindung zu Google-Servern) */
+  @font-face { font-family:'Inter'; font-style:normal; font-weight:400; font-display:swap; src:url('lib/fonts/inter-latin-400-normal.woff2') format('woff2'); }
+  @font-face { font-family:'Inter'; font-style:normal; font-weight:500; font-display:swap; src:url('lib/fonts/inter-latin-500-normal.woff2') format('woff2'); }
+  @font-face { font-family:'Inter'; font-style:normal; font-weight:600; font-display:swap; src:url('lib/fonts/inter-latin-600-normal.woff2') format('woff2'); }
+  @font-face { font-family:'Inter'; font-style:normal; font-weight:700; font-display:swap; src:url('lib/fonts/inter-latin-700-normal.woff2') format('woff2'); }
+  @font-face { font-family:'Space Grotesk'; font-style:normal; font-weight:500; font-display:swap; src:url('lib/fonts/space-grotesk-latin-500-normal.woff2') format('woff2'); }
+  @font-face { font-family:'Space Grotesk'; font-style:normal; font-weight:600; font-display:swap; src:url('lib/fonts/space-grotesk-latin-600-normal.woff2') format('woff2'); }
+  @font-face { font-family:'Space Grotesk'; font-style:normal; font-weight:700; font-display:swap; src:url('lib/fonts/space-grotesk-latin-700-normal.woff2') format('woff2'); }
   :root {
     --bg:#0e1014; --surface:#171b22; --surface-2:#1f242d; --border:#2a313c;
     --text:#e7eaef; --muted:#8b94a3; --gold:#e7b04b;
@@ -332,6 +337,7 @@
       </div>
       <p class="hint" id="auth-status" style="min-height:1.2em;margin-top:10px"></p>
       <p class="hint" style="text-align:center;margin:4px 0 0"><a href="#" id="auth-forgot">Passwort vergessen?</a></p>
+      <p class="hint" style="text-align:center;margin:14px 0 0"><a href="legal.html#impressum">Impressum</a> · <a href="legal.html#datenschutz">Datenschutz</a></p>
     </form>
   </div>
 </div>
@@ -346,6 +352,7 @@
       </svg>Tiny Tokyo<span> Tracker</span>
     </div>
     <nav>
+      <a href="#/dashboard" data-view="dashboard">Start</a>
       <a href="#/suche" data-view="suche">Suche</a>
       <a href="#/sammlung" data-view="sammlung">Sammlung <span class="count" id="nav-count"></span></a>
       <a href="#/wunschliste" data-view="wunschliste">Wunschliste <span class="count" id="wish-count"></span></a>
@@ -362,6 +369,35 @@
     <a href="#/graded" data-sub="graded">Graded</a>
     <a href="#/verkauft" data-sub="verkauft">Verkauft <span class="count" id="sold-count"></span></a>
   </div>
+
+  <!-- ============ DASHBOARD (Startseite) ============ -->
+  <section class="view" id="view-dashboard">
+    <div class="hero">
+      <div>
+        <div class="label">Willkommen bei</div>
+        <div class="value" style="font-size:1.9rem">⛩ Tiny Tokyo Tracker</div>
+        <div class="breakdown">Sammlung verwalten · Preise verfolgen · mit der Community handeln</div>
+      </div>
+      <div class="actions">
+        <button onclick="location.hash='#/suche'">🔍 Karten suchen</button>
+        <button class="ghost" onclick="location.hash='#/community'">Community</button>
+      </div>
+    </div>
+    <div class="an-grid" id="db-stats"></div>
+    <div class="an-card">
+      <h3>🏪 Unser Shop</h3>
+      <p style="color:#c7cdd6;margin:6px 0">Tiny Tokyo – dein Shop für Pokémon, Magic, Yu-Gi-Oh und One Piece.
+         Einzelkarten, Displays und Zubehör; Ankauf und Tausch nach Absprache.</p>
+      <p style="color:#c7cdd6;margin:6px 0">Julian Asleh<br />Fiedlerstraße 5<br />37115 Duderstadt<br />
+         E-Mail: <a href="mailto:julianasleh@gmail.com">julianasleh@gmail.com</a></p>
+    </div>
+    <div class="an-card">
+      <h3>✨ Neu in der App</h3>
+      <p style="color:#c7cdd6;margin:6px 0">🤝 Trade-System mit beidseitiger Bestätigung · ⭐ Feedback nach echten Trades ·
+         👤 Profile mit Abzeichen und Erfolgsquote · 🎯 Wunschlisten-Alarm in der Community · 🇯🇵🇹🇼 japanische und chinesische Karten in der Suche.</p>
+    </div>
+    <p class="msub" style="text-align:center"><a href="legal.html#impressum">Impressum</a> · <a href="legal.html#datenschutz">Datenschutz</a> · <a href="legal.html#disclaimer">Disclaimer</a></p>
+  </section>
 
   <!-- ============ SUCHE ============ -->
   <section class="view" id="view-suche">
@@ -691,6 +727,12 @@
         <button class="ghost" id="logout-btn">Abmelden</button>
       </div>
       <p class="msub" style="margin:8px 0 0">Deine Daten bleiben in der Cloud gespeichert und sind nach dem nächsten Anmelden wieder da.</p>
+    </div>
+
+    <div class="info-card">
+      <h3>Rechtliches</h3>
+      <p style="margin:6px 0"><a href="legal.html#impressum">Impressum</a> · <a href="legal.html#datenschutz">Datenschutzerklärung</a> · <a href="legal.html#disclaimer">Disclaimer</a></p>
+      <p class="msub" style="margin:6px 0 0">Konto löschen: formlose E-Mail an <a href="mailto:julianasleh@gmail.com">julianasleh@gmail.com</a> genügt – alle Daten werden entfernt.</p>
     </div>
 
     <h3 class="sealed-h" style="margin-top:28px">📖 Anleitung &amp; Infos</h3>
@@ -1312,6 +1354,28 @@ function refText(c) {
   return number || code || '';
 }
 
+// ---- Dashboard (Startseite) ----
+async function loadDashboard() {
+  const el = document.getElementById('db-stats');
+  const stat = (k, v, sub) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div>${sub?`<div class="sub">${sub}</div>`:''}</div>`;
+  el.innerHTML = stat('Sammlungswert', '…') + stat('Community-Angebote', '…') + stat('Wunschliste', '…') + stat('Offen für dich', '…');
+  try {
+    const [h, w, m, u, t] = await Promise.all([
+      fetch('api/collection/history').then(r=>r.json()).catch(()=>null),
+      fetch('api/wishlist').then(r=>r.json()).catch(()=>null),
+      fetch('api/market').then(r=>r.json()).catch(()=>null),
+      fetch('api/messages/unread').then(r=>r.json()).catch(()=>({count:0})),
+      fetch('api/trades/open-count').then(r=>r.json()).catch(()=>({count:0})),
+    ]);
+    const tot = h && h.totals ? h.totals.total : null;
+    el.innerHTML =
+      stat('Sammlungswert', tot != null ? fmt(tot, 'EUR') : '–', '30-Tage-Schnitt') +
+      stat('Community-Angebote', (m && m.items) ? m.items.length : '–') +
+      stat('Wunschliste', (w && w.items) ? w.items.length : '–') +
+      stat('Offen für dich', (u.count || 0) + (t.count || 0), 'Nachrichten + Trade-Anfragen');
+  } catch { el.innerHTML = ''; }
+}
+
 // ---- Meta laden (Sprachen pro Spiel) ----
 async function loadMeta() {
   try { const r = await fetch('api/meta'); META = await r.json(); } catch {}
@@ -1329,8 +1393,8 @@ function buildLangOptions() {
 
 // ---- Routing ----
 function route() {
-  const view = (location.hash.replace('#/','') || 'suche');
-  const target = ['sammlung','wunschliste','versiegelt','verkauft','analyse','einstellungen','graded','community'].includes(view) ? view : 'suche';
+  const view = (location.hash.replace('#/','') || 'dashboard');
+  const target = ['dashboard','sammlung','wunschliste','versiegelt','verkauft','analyse','einstellungen','graded','community'].includes(view) ? view : (view === 'suche' ? 'suche' : 'dashboard');
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + target).classList.add('active');
   const BESTAND = ['sammlung','versiegelt','graded','verkauft'];
@@ -1339,6 +1403,7 @@ function route() {
   const sub = document.getElementById('bestand-subnav');
   sub.style.display = BESTAND.includes(target) ? '' : 'none';
   sub.querySelectorAll('a').forEach(a => a.classList.toggle('active', a.dataset.sub===target));
+  if (target==='dashboard') loadDashboard();
   if (target==='sammlung') { loadCollection(); recordOpenSnapshot().then(loadHistory); }
   if (target==='wunschliste') loadWishlist();
   if (target==='versiegelt') loadSealed();
