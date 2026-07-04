@@ -364,7 +364,7 @@
   // --- Einstellungen (z. B. PokemonPriceTracker-Key fuers Graded-Modul) --------
   // Allowlist statt beliebiger Keys: verhindert, dass ueber diese generische Route
   // versehentlich andere/zukuenftige Settings ausgelesen werden koennten.
-  const SETTINGS_ALLOWLIST = ['pokepriceApiKey', 'displayName', 'contact'];
+  const SETTINGS_ALLOWLIST = ['pokepriceApiKey', 'displayName', 'contact', 'country'];
   route('GET', '/api/settings/:key', async ({ params }) => {
     if (!SETTINGS_ALLOWLIST.includes(params.key)) return bad(404, { error: 'Unbekannter Einstellungs-Schlüssel' });
     return ok({ value: await D.getSetting(params.key) });
@@ -382,6 +382,40 @@
       // Sicht existiert noch nicht -> verstaendliche Meldung statt 500
       return bad(503, { error: 'Community noch nicht eingerichtet. Bitte supabase-community.sql im Supabase-SQL-Editor ausführen.', detail: String((e && e.message) || e) });
     }
+  });
+
+  // --- Nachrichten / Rangliste --------------------------------------------------
+  const SQL2_HINT = 'Bitte zuerst supabase-community-2.sql im Supabase-SQL-Editor ausführen.';
+  route('GET', '/api/messages/unread', async () => {
+    try { return ok({ count: await D.unreadMessages() }); } catch { return ok({ count: 0 }); }
+  });
+  route('POST', '/api/messages/read', async ({ body }) => {
+    const ids = ((body && body.ids) || []).map(Number).filter(Number.isFinite);
+    try { return ok({ ok: true, n: await D.markMessagesRead(ids) }); }
+    catch (e) { return bad(502, { error: String((e && e.message) || e) }); }
+  });
+  route('GET', '/api/messages', async () => {
+    try { return ok({ items: await D.listMessages() }); }
+    catch (e) { return bad(503, { error: 'Postfach noch nicht eingerichtet. ' + SQL2_HINT, detail: String((e && e.message) || e) }); }
+  });
+  route('POST', '/api/messages', async ({ body }) => {
+    const b = body || {};
+    const text = String(b.body || '').trim();
+    if (!b.toUser || !text) return bad(400, { error: 'Empfänger und Nachrichtentext sind nötig' });
+    if (text.length > 2000) return bad(400, { error: 'Nachricht zu lang (max. 2000 Zeichen)' });
+    try { await D.sendMessage(String(b.toUser), b.cardName != null ? String(b.cardName) : null, text); return ok({ ok: true }, 201); }
+    catch (e) {
+      const msg = String((e && e.message) || e);
+      return bad(502, { error: /relation|schema|messages/i.test(msg) ? ('Postfach noch nicht eingerichtet. ' + SQL2_HINT) : msg });
+    }
+  });
+  route('DELETE', '/api/messages/:id', async ({ params }) => {
+    try { return ok({ ok: await D.deleteMessage(Number(params.id)) }); }
+    catch (e) { return bad(502, { error: String((e && e.message) || e) }); }
+  });
+  route('GET', '/api/leaderboard', async () => {
+    try { return ok({ rows: await D.leaderboard() }); }
+    catch (e) { return bad(503, { error: 'Rangliste noch nicht eingerichtet. ' + SQL2_HINT }); }
   });
 
   // --- Dispatcher -------------------------------------------------------------

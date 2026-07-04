@@ -483,7 +483,7 @@
   }
 
   // --- Einstellungen --------------------------------------------------------
-  const SETTINGS_COLS = { pokepriceApiKey: 'pokeprice_api_key', displayName: 'display_name', contact: 'contact' };
+  const SETTINGS_COLS = { pokepriceApiKey: 'pokeprice_api_key', displayName: 'display_name', contact: 'contact', country: 'country' };
   async function getSetting(key) {
     const col = SETTINGS_COLS[key];
     if (!col) return null;
@@ -504,9 +504,45 @@
     return must(await getClient().from('market_cards').select('*').order('game', { ascending: true }));
   }
 
+  // --- Nachrichten -----------------------------------------------------------
+  async function listMessages() {
+    return must(await getClient().from('messages_view').select('*').order('created_at', { ascending: false }).limit(200));
+  }
+  async function unreadMessages() {
+    const uid = await requireUserId();
+    const { count, error } = await getClient().from('messages')
+      .select('id', { count: 'exact', head: true }).eq('to_user', uid).eq('read', false);
+    if (error) throw new Error(error.message);
+    return count || 0;
+  }
+  async function sendMessage(toUser, cardName, body) {
+    const uid = await requireUserId();
+    const { error } = await getClient().from('messages')
+      .insert({ from_user: uid, to_user: toUser, card_name: cardName ?? null, body });
+    if (error) throw new Error(error.message);
+    return true;
+  }
+  async function markMessagesRead(ids) {
+    if (!Array.isArray(ids) || !ids.length) return 0;
+    const { error } = await getClient().from('messages').update({ read: true }).in('id', ids);
+    if (error) throw new Error(error.message);
+    return ids.length;
+  }
+  async function deleteMessage(id) {
+    const { error, count } = await getClient().from('messages').delete({ count: 'exact' }).eq('id', id);
+    if (error) throw new Error(error.message);
+    return (count || 0) > 0;
+  }
+
+  // --- Punkte-Rangliste --------------------------------------------------------
+  async function leaderboard() {
+    return must(await getClient().from('leaderboard').select('*'));
+  }
+
   window.DB = {
     init, signUp, signIn, signOut, getSession, onAuthChange, resetPassword, updatePassword,
     getSetting, setSetting, listMarket,
+    listMessages, unreadMessages, sendMessage, markMessagesRead, deleteMessage, leaderboard,
     listCards, addCard, updateCard, deleteCard, allForRefresh,
     listSold, soldForRefresh, soldTotals,
     computeTotals, recordSnapshot, getHistory, getCardHistory,

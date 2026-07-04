@@ -347,7 +347,7 @@
       <a href="#/verkauft" data-view="verkauft">Verkauft <span class="count" id="sold-count"></span></a>
       <a href="#/analyse" data-view="analyse">Analyse</a>
       <a href="#/graded" data-view="graded">Graded</a>
-      <a href="#/community" data-view="community">Community</a>
+      <a href="#/community" data-view="community">Community <span class="count" id="cm-nav-unread"></span></a>
       <a href="#/einstellungen" data-view="einstellungen">Einstellungen</a>
       <a href="#" id="logout-link" title="Abmelden">Abmelden</a>
     </nav>
@@ -574,6 +574,13 @@
       <div class="actions"><button class="ghost" id="cm-reload">Neu laden</button></div>
     </div>
     <div class="filterbar row">
+      <div class="row" id="cm-tabs">
+        <button class="chip active" data-tab="angebote">Angebote</button>
+        <button class="chip" data-tab="postfach">Postfach <span class="count" id="cm-unread-tab"></span></button>
+        <button class="chip" data-tab="rangliste">Rangliste</button>
+      </div>
+    </div>
+    <div class="filterbar row" id="cm-filterbar">
       <div class="row" id="cm-chips">
         <button class="chip active" data-game="">Alle</button>
         <button class="chip" data-game="pokemon">Pokémon</button>
@@ -585,6 +592,8 @@
       <input type="text" id="cm-search" placeholder="Angebote durchsuchen…" style="max-width:220px" />
     </div>
     <div id="community-list"></div>
+    <div id="community-inbox" style="display:none"></div>
+    <div id="community-board" style="display:none"></div>
   </section>
 
   <!-- ============ INFO ============ -->
@@ -677,6 +686,7 @@
       <p class="msub" style="margin-top:0">Wird nur bei deinen Verkaufsangeboten im Community-Reiter angezeigt. Ohne Anzeigename erscheinst du als „Sammler", ohne Kontakt können dich Interessenten nicht erreichen.</p>
       <div class="row" style="gap:8px">
         <input type="text" id="cm-name" placeholder="Anzeigename, z. B. Tiny Tokyo" style="flex:1;min-width:160px" />
+        <select id="cm-country" title="Land (wird als Flagge neben deinem Namen angezeigt)" style="min-width:150px"></select>
         <input type="text" id="cm-contact" placeholder="Kontakt (E-Mail, Instagram, …)" style="flex:1;min-width:200px" />
         <button class="ghost" id="cm-profile-save">Speichern</button>
       </div>
@@ -892,6 +902,21 @@
   </div>
 </div>
 
+<!-- Nachricht an einen anderen Sammler senden -->
+<div class="modal-bg" id="msg-modal">
+  <div class="modal">
+    <h3 id="mm-title">Nachricht senden</h3>
+    <div class="msub" id="mm-sub"></div>
+    <div class="field"><label>Nachricht</label>
+      <textarea id="mm-body" rows="4" maxlength="2000" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 13px;color:var(--text);font:inherit;resize:vertical"></textarea>
+    </div>
+    <div class="mactions">
+      <button class="ghost" id="mm-cancel">Abbrechen</button>
+      <button id="mm-send">Senden</button>
+    </div>
+  </div>
+</div>
+
 <!-- Karten-Detailansicht: großes Bild, Infos, Einzelkarten-Verlauf -->
 <div class="modal-bg" id="detail-modal">
   <div class="modal detail-modal">
@@ -1067,6 +1092,7 @@ async function startAppAfterAuth() {
     try { await navigator.serviceWorker.register('sw.js'); } catch (e) { console.warn('Service Worker:', e); }
   }
   route();
+  refreshUnread();
   autoRefreshPrices(); // laeuft im Hintergrund, blockiert den Start nicht
 }
 
@@ -1164,6 +1190,10 @@ const fmt = (n, cur='EUR') => (n ?? 0).toLocaleString(cur==='USD'?'en-US':'de-DE
 const GAME_LABEL = { pokemon:'Pokémon', magic:'Magic', yugioh:'Yu-Gi-Oh', onepiece:'One Piece' };
 const FLAGS = { de:'🇩🇪', en:'🇬🇧', fr:'🇫🇷', es:'🇪🇸', it:'🇮🇹', pt:'🇵🇹', 'pt-br':'🇧🇷', 'pt-pt':'🇵🇹', nl:'🇳🇱', pl:'🇵🇱', ru:'🇷🇺', ja:'🇯🇵', ko:'🇰🇷', 'zh-tw':'🇹🇼', 'zh-cn':'🇨🇳', id:'🇮🇩', th:'🇹🇭', zhs:'🇨🇳', zht:'🇹🇼' };
 function flagFor(code){ return code ? (FLAGS[String(code).toLowerCase()] || '') : ''; }
+// Laenderflagge aus ISO-Code (DE -> 🇩🇪) und deutscher Laendername
+function countryFlag(cc){ cc = String(cc||'').toUpperCase(); return /^[A-Z]{2}$/.test(cc) ? String.fromCodePoint(...[...cc].map(ch=>127397+ch.charCodeAt(0))) : ''; }
+const COUNTRIES = ['DE','AT','CH','FR','IT','ES','PT','NL','BE','LU','PL','CZ','DK','SE','NO','FI','IE','GB','US','CA','JP','KR','AU'];
+function countryName(cc){ try { return new Intl.DisplayNames(['de'],{type:'region'}).of(cc) || cc; } catch { return cc; } }
 function langLabel(code){
   code = String(code || '').toLowerCase();
   if (!code || code === '—') return 'Unbekannt';
@@ -1209,7 +1239,7 @@ function route() {
   if (target==='verkauft') loadSold();
   if (target==='analyse') { recordOpenSnapshot().then(loadAnalyse); }
   if (target==='graded') loadGraded();
-  if (target==='community') loadCommunity();
+  if (target==='community') { cmShowTab('angebote'); loadCommunity(); }
   if (target==='einstellungen') loadCommunityProfile();
 }
 // Bei jedem Öffnen der Sammlung einen aktuellen Verlaufspunkt für heute festlegen.
@@ -1811,49 +1841,91 @@ document.getElementById('wish-refresh').addEventListener('click', async e=>{
   } finally { b.disabled=false; if (b.textContent==='Aktualisiere…') b.textContent=t; }
 });
 
-// ---- Community (Marktplatz) ----
+// ---- Community (Marktplatz, Postfach, Rangliste) ----
 let marketItems = [];
 let cmGame = '';
+let cmWishOnly = false;
+let wishKeys = new Set();
+
+function cmShowTab(tab) {
+  document.querySelectorAll('#cm-tabs .chip').forEach(c=>c.classList.toggle('active', c.dataset.tab===tab));
+  document.getElementById('cm-filterbar').style.display = tab==='angebote' ? '' : 'none';
+  document.getElementById('community-list').style.display = tab==='angebote' ? '' : 'none';
+  document.getElementById('community-inbox').style.display = tab==='postfach' ? '' : 'none';
+  document.getElementById('community-board').style.display = tab==='rangliste' ? '' : 'none';
+  if (tab==='postfach') loadInbox();
+  if (tab==='rangliste') loadBoard();
+}
+document.getElementById('cm-tabs').addEventListener('click', e=>{
+  const chip = e.target.closest('.chip'); if (!chip) return;
+  cmShowTab(chip.dataset.tab);
+});
+
 async function loadCommunity() {
+  refreshUnread();
   const el = document.getElementById('community-list');
   el.innerHTML = '<div class="empty">Lade Angebote…</div>';
   try {
-    const r = await fetch('api/market');
+    const [r, wr] = await Promise.all([fetch('api/market'), fetch('api/wishlist')]);
     const d = await r.json();
     if (!r.ok) { el.innerHTML = `<div class="empty">${escapeHtml(d.error || 'Fehler beim Laden.')}</div>`; marketItems = []; document.getElementById('cm-count').textContent = '0'; return; }
     marketItems = d.items || [];
+    try { const w = await wr.json(); wishKeys = new Set((w.items || []).map(i => i.game + '|' + i.external_id)); } catch { wishKeys = new Set(); }
   } catch { marketItems = []; }
   renderCommunity();
 }
+// Passt ein Angebot zu einer Karte auf der eigenen Wunschliste?
+function isWishMatch(c) { return !c.is_mine && c.external_id && wishKeys.has(c.game + '|' + c.external_id); }
+
 function renderCommunity() {
   const term = document.getElementById('cm-search').value.trim().toLowerCase();
-  const list = marketItems
+  const matches = marketItems.filter(isWishMatch);
+  let list = marketItems
     .filter(c => !cmGame || c.game === cmGame)
     .filter(c => !term || [c.name, c.set_name, c.seller_name].filter(Boolean).join(' ').toLowerCase().includes(term));
+  if (cmWishOnly) list = list.filter(isWishMatch);
   document.getElementById('cm-count').textContent = list.length;
   const el = document.getElementById('community-list');
+  const banner = matches.length ? `<div class="filterbar row" style="border-color:#2f7d52">
+      <span>🎯 <b>${matches.length}</b> Angebot${matches.length===1?' passt':'e passen'} zu deiner Wunschliste!</span>
+      <span class="ci-spacer"></span>
+      <button class="chip ${cmWishOnly?'active':''}" id="cm-wishonly">${cmWishOnly?'alle zeigen':'nur diese zeigen'}</button>
+    </div>` : '';
   if (!list.length) {
-    el.innerHTML = '<div class="empty">Keine Angebote gefunden. Eigene Karten anbieten: Sammlung → ✎ → „Zum Verkauf anbieten".</div>';
+    el.innerHTML = banner + '<div class="empty">Keine Angebote gefunden. Eigene Karten anbieten: Sammlung → ✎ → „Zum Verkauf anbieten".</div>';
+    bindWishOnly();
     return;
   }
-  el.innerHTML = list.map(c => {
+  el.innerHTML = banner + list.map(c => {
     const cur = c.currency || 'EUR';
     const price = c.asking_price != null ? fmt(c.asking_price, cur)
       : (c.price_current != null ? `${fmt(c.price_current, cur)} <small style="color:var(--muted)">Marktwert</small>` : 'Preis auf Anfrage');
     const ref = refText({ setCode: c.set_code, number: c.number });
+    const cflag = countryFlag(c.seller_country);
     return `
-    <div class="collection-item">
+    <div class="collection-item" data-sid="${escapeHtml(c.seller_id||'')}" data-sname="${escapeHtml(c.seller_name||'Sammler')}" data-cname="${escapeHtml(c.name||'')}">
       ${c.image_url ? `<img src="${c.image_url}" alt="" loading="lazy" />` : ''}
       <div class="ci-main">
-        <div class="ci-name">${escapeHtml(c.name)}${c.quantity>1?` ×${c.quantity}`:''}${c.is_mine?'<span class="badge-target">dein Angebot</span>':''}</div>
+        <div class="ci-name">${escapeHtml(c.name)}${c.quantity>1?` ×${c.quantity}`:''}${c.is_mine?'<span class="badge-target">dein Angebot</span>':''}${isWishMatch(c)?'<span class="badge-target">🎯 Wunschliste</span>':''}</div>
         <div class="ci-sub">${GAME_LABEL[c.game]||c.game} · <span class="flag">${flagFor(c.language)}</span>${escapeHtml(c.set_name||'')}${ref?` · <b>${escapeHtml(ref)}</b>`:''} · Zustand ${escapeHtml(c.condition||'–')}</div>
-        <div class="ci-sub">Verkäufer: <b>${escapeHtml(c.seller_name||'Sammler')}</b>${c.seller_contact?` · Kontakt: <b>${escapeHtml(c.seller_contact)}</b>`:''}</div>
+        <div class="ci-sub">Verkäufer: ${cflag?cflag+' ':''}<b>${escapeHtml(c.seller_name||'Sammler')}</b>${c.seller_contact?` · Kontakt: <b>${escapeHtml(c.seller_contact)}</b>`:''}</div>
       </div>
       <div class="ci-spacer"></div>
       <div class="ci-prices"><div class="ci-price" style="cursor:default">${price}</div></div>
+      ${(!c.is_mine && c.seller_id) ? '<button class="wtocoll" data-act="msg" title="Dem Verkäufer eine Nachricht schreiben">✉ Anschreiben</button>' : ''}
     </div>`;
   }).join('');
+  bindWishOnly();
 }
+function bindWishOnly() {
+  const wb = document.getElementById('cm-wishonly');
+  if (wb) wb.addEventListener('click', ()=>{ cmWishOnly = !cmWishOnly; renderCommunity(); });
+}
+document.getElementById('community-list').addEventListener('click', e=>{
+  const btn = e.target.closest('[data-act="msg"]'); if (!btn) return;
+  const item = e.target.closest('.collection-item'); if (!item) return;
+  openMsgModal(item.dataset.sid, item.dataset.sname, item.dataset.cname);
+});
 document.getElementById('cm-chips').addEventListener('click', e=>{
   const chip = e.target.closest('.chip'); if(!chip) return;
   cmGame = chip.dataset.game;
@@ -1863,13 +1935,120 @@ document.getElementById('cm-chips').addEventListener('click', e=>{
 document.getElementById('cm-search').addEventListener('input', renderCommunity);
 document.getElementById('cm-reload').addEventListener('click', loadCommunity);
 
+// ---- Nachrichten (Postfach) ----
+let msgTo = null;
+function openMsgModal(toUser, toName, cardName) {
+  if (!toUser) return;
+  msgTo = { toUser, cardName: cardName || null };
+  document.getElementById('mm-title').textContent = 'Nachricht an ' + (toName || 'Sammler');
+  document.getElementById('mm-sub').textContent = cardName ? ('Zum Angebot: ' + cardName) : '';
+  document.getElementById('mm-body').value = '';
+  document.getElementById('msg-modal').classList.add('open');
+  document.getElementById('mm-body').focus();
+}
+function closeMsgModal() { document.getElementById('msg-modal').classList.remove('open'); msgTo = null; }
+document.getElementById('mm-cancel').addEventListener('click', closeMsgModal);
+document.getElementById('msg-modal').addEventListener('click', e=>{ if (e.target.id==='msg-modal') closeMsgModal(); });
+document.getElementById('mm-send').addEventListener('click', async ()=>{
+  if (!msgTo) return;
+  const body = document.getElementById('mm-body').value.trim();
+  if (!body) return;
+  const b = document.getElementById('mm-send'); b.disabled = true; b.textContent = 'Sende…';
+  try {
+    const r = await fetch('api/messages', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ toUser: msgTo.toUser, cardName: msgTo.cardName, body }) });
+    const d = await r.json().catch(()=>({}));
+    if (!r.ok) { alert('Senden fehlgeschlagen: ' + (d.error || ('HTTP ' + r.status))); return; }
+    closeMsgModal();
+  } finally { b.disabled = false; b.textContent = 'Senden'; }
+});
+
+async function refreshUnread() {
+  try {
+    const d = await (await fetch('api/messages/unread')).json();
+    const n = d.count || 0;
+    const nav = document.getElementById('cm-nav-unread'); if (nav) nav.textContent = n ? `(${n})` : '';
+    const tab = document.getElementById('cm-unread-tab'); if (tab) tab.textContent = n ? `(${n})` : '';
+  } catch {}
+}
+
+async function loadInbox() {
+  const el = document.getElementById('community-inbox');
+  el.innerHTML = '<div class="empty">Lade Nachrichten…</div>';
+  let items = [];
+  try {
+    const r = await fetch('api/messages');
+    const d = await r.json();
+    if (!r.ok) { el.innerHTML = `<div class="empty">${escapeHtml(d.error || 'Fehler beim Laden.')}</div>`; return; }
+    items = d.items || [];
+  } catch { el.innerHTML = '<div class="empty">Fehler beim Laden.</div>'; return; }
+  if (!items.length) { el.innerHTML = '<div class="empty">Noch keine Nachrichten. Schreib jemandem über „✉ Anschreiben" bei einem Angebot.</div>'; return; }
+  el.innerHTML = items.map(m => `
+    <div class="collection-item" style="${(m.incoming && !m.read) ? 'border-color:var(--gold)' : ''}" data-mid="${m.id}" data-uid="${escapeHtml(m.incoming ? m.from_user : m.to_user)}" data-uname="${escapeHtml(m.incoming ? m.from_name : m.to_name)}">
+      <div class="ci-main">
+        <div class="ci-name">${m.incoming ? 'Von' : 'An'} ${escapeHtml(m.incoming ? m.from_name : m.to_name)}${m.card_name ? ` <small style="color:var(--muted)">· ${escapeHtml(m.card_name)}</small>` : ''}${(m.incoming && !m.read) ? '<span class="badge-target">neu</span>' : ''}</div>
+        <div class="ci-sub" style="white-space:pre-wrap">${escapeHtml(m.body)}</div>
+        <div class="ci-sub">${new Date(m.created_at).toLocaleString('de-DE')}</div>
+      </div>
+      <div class="ci-spacer"></div>
+      ${m.incoming ? '<button class="wtocoll" data-act="reply">↩ Antworten</button>' : ''}
+      <button class="ci-del" data-act="mdel" title="Nachricht löschen">✕</button>
+    </div>`).join('');
+  // Eingegangene ungelesene Nachrichten als gelesen markieren
+  const unreadIds = items.filter(m => m.incoming && !m.read).map(m => m.id);
+  if (unreadIds.length) {
+    try { await fetch('api/messages/read', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ids: unreadIds }) }); } catch {}
+    refreshUnread();
+  }
+}
+document.getElementById('community-inbox').addEventListener('click', async e=>{
+  const item = e.target.closest('.collection-item'); if (!item) return;
+  const act = e.target.closest('[data-act]')?.dataset.act;
+  if (act==='reply') openMsgModal(item.dataset.uid, item.dataset.uname, null);
+  else if (act==='mdel') {
+    if (!confirm('Nachricht wirklich löschen?')) return;
+    await fetch('api/messages/'+item.dataset.mid, { method:'DELETE' });
+    loadInbox();
+  }
+});
+
+// ---- Punkte-Rangliste ----
+async function loadBoard() {
+  const el = document.getElementById('community-board');
+  el.innerHTML = '<div class="empty">Lade Rangliste…</div>';
+  let rows = [];
+  try {
+    const r = await fetch('api/leaderboard');
+    const d = await r.json();
+    if (!r.ok) { el.innerHTML = `<div class="empty">${escapeHtml(d.error || 'Fehler beim Laden.')}</div>`; return; }
+    rows = d.rows || [];
+  } catch { el.innerHTML = '<div class="empty">Fehler beim Laden.</div>'; return; }
+  if (!rows.length) { el.innerHTML = '<div class="empty">Noch keine Punkte vergeben.</div>'; return; }
+  el.innerHTML = `<div class="an-card"><h3>🏆 Rangliste</h3>` + rows.map((r2,i)=>`
+    <div class="top-row"${r2.is_me?' style="color:var(--gold)"':''}>
+      <span class="rank">${i+1}</span>
+      <span class="nm">${countryFlag(r2.country)?countryFlag(r2.country)+' ':''}${escapeHtml(r2.name||'Sammler')}${r2.is_me?' <small>(du)</small>':''}</span>
+      <span class="vl">${r2.points} P.</span>
+    </div>`).join('') +
+    `<p class="msub" style="margin-top:10px">Punkte: 10 je Karte in der Sammlung · 25 je aktives Verkaufsangebot · 50 je verkaufte Karte · 5 je Wunschlisten-Eintrag.</p></div>`;
+}
+
 // ---- Community-Profil (Einstellungen) ----
+function buildCountryOptions() {
+  const sel = document.getElementById('cm-country');
+  if (!sel || sel.options.length > 1) return;
+  sel.innerHTML = '<option value="">🌍 Land (optional)</option>' +
+    COUNTRIES.map(cc => `<option value="${cc}">${countryFlag(cc)} ${escapeHtml(countryName(cc))}</option>`).join('');
+}
 async function loadCommunityProfile() {
+  buildCountryOptions();
   try {
     const n = await (await fetch('api/settings/displayName')).json();
     const k = await (await fetch('api/settings/contact')).json();
+    const c = await (await fetch('api/settings/country')).json();
     if (n && n.value != null) document.getElementById('cm-name').value = n.value;
     if (k && k.value != null) document.getElementById('cm-contact').value = k.value;
+    if (c && c.value != null) document.getElementById('cm-country').value = c.value;
   } catch {}
 }
 document.getElementById('cm-profile-save').addEventListener('click', async ()=>{
@@ -1879,7 +2058,8 @@ document.getElementById('cm-profile-save').addEventListener('click', async ()=>{
   try {
     const r1 = await post('displayName', document.getElementById('cm-name').value.trim());
     const r2 = await post('contact', document.getElementById('cm-contact').value.trim());
-    st.textContent = (r1.ok && r2.ok) ? 'Gespeichert ✓' : 'Fehler beim Speichern – ist supabase-community.sql schon ausgeführt?';
+    const r3 = await post('country', document.getElementById('cm-country').value);
+    st.textContent = (r1.ok && r2.ok && r3.ok) ? 'Gespeichert ✓' : 'Fehler beim Speichern – sind die SQL-Skripte schon ausgeführt?';
   } catch { st.textContent = 'Fehler beim Speichern.'; }
   setTimeout(()=>{ st.textContent=''; }, 3500);
 });
