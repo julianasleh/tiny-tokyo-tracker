@@ -33,13 +33,13 @@
   }
 
   // ---- Auth --------------------------------------------------------------
-  async function signUp(email, password) {
-    const { data, error } = await getClient().auth.signUp({ email, password });
+  async function signUp(email, password, captchaToken) {
+    const { data, error } = await getClient().auth.signUp({ email, password, options: captchaToken ? { captchaToken } : undefined });
     if (error) throw new Error(error.message);
     return data;
   }
-  async function signIn(email, password) {
-    const { data, error } = await getClient().auth.signInWithPassword({ email, password });
+  async function signIn(email, password, captchaToken) {
+    const { data, error } = await getClient().auth.signInWithPassword({ email, password, options: captchaToken ? { captchaToken } : undefined });
     if (error) throw new Error(error.message);
     currentUserId = data.user ? data.user.id : null;
     return data;
@@ -48,8 +48,8 @@
     await getClient().auth.signOut();
     currentUserId = null;
   }
-  async function resetPassword(email) {
-    const { error } = await getClient().auth.resetPasswordForEmail(email);
+  async function resetPassword(email, captchaToken) {
+    const { error } = await getClient().auth.resetPasswordForEmail(email, captchaToken ? { captchaToken } : undefined);
     if (error) throw new Error(error.message);
   }
   async function updatePassword(password) {

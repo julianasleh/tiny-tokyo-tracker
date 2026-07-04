@@ -335,6 +335,7 @@
         <button type="submit" id="auth-login-btn" style="flex:1">Anmelden</button>
         <button type="button" id="auth-signup-btn" class="ghost" style="flex:1">Neu registrieren</button>
       </div>
+      <div id="turnstile-box" style="margin-top:12px;display:flex;justify-content:center"></div>
       <p class="hint" id="auth-status" style="min-height:1.2em;margin-top:10px"></p>
       <p class="hint" style="text-align:center;margin:4px 0 0"><a href="#" id="auth-forgot">Passwort vergessen?</a></p>
       <p class="hint" style="text-align:center;margin:14px 0 0"><a href="legal.html#impressum">Impressum</a> · <a href="legal.html#datenschutz">Datenschutz</a></p>
@@ -384,18 +385,9 @@
       </div>
     </div>
     <div class="an-grid" id="db-stats"></div>
-    <div class="an-card">
-      <h3>🏪 Unser Shop</h3>
-      <p style="color:#c7cdd6;margin:6px 0">Tiny Tokyo – dein Shop für Pokémon, Magic, Yu-Gi-Oh und One Piece.
-         Einzelkarten, Displays und Zubehör; Ankauf und Tausch nach Absprache.</p>
-      <p style="color:#c7cdd6;margin:6px 0">Julian Asleh<br />Fiedlerstraße 5<br />37115 Duderstadt<br />
-         E-Mail: <a href="mailto:julianasleh@gmail.com">julianasleh@gmail.com</a></p>
-    </div>
-    <div class="an-card">
-      <h3>✨ Neu in der App</h3>
-      <p style="color:#c7cdd6;margin:6px 0">🤝 Trade-System mit beidseitiger Bestätigung · ⭐ Feedback nach echten Trades ·
-         👤 Profile mit Abzeichen und Erfolgsquote · 🎯 Wunschlisten-Alarm in der Community · 🇯🇵🇹🇼 japanische und chinesische Karten in der Suche.</p>
-    </div>
+    <p class="msub" id="db-pricenote" style="margin:0 0 14px"></p>
+    <div class="an-card" id="db-shop"></div>
+    <div class="an-card" id="db-news"></div>
     <p class="msub" style="text-align:center"><a href="legal.html#impressum">Impressum</a> · <a href="legal.html#datenschutz">Datenschutz</a> · <a href="legal.html#disclaimer">Disclaimer</a></p>
   </section>
 
@@ -1159,6 +1151,7 @@
 
 <script src="lib/supabase.js"></script>
 <script src="config.js"></script>
+<script src="content.js"></script>
 <script src="db-supabase.js"></script>
 <script src="adapters-browser.js"></script>
 <script src="lib/xlsx.full.min.js"></script>
@@ -1272,10 +1265,31 @@ async function autoRefreshPrices() {
     else { refreshWishCount(); }
   } catch (e) { console.warn('Auto-Refresh übersprungen:', e); }
 }
+let tsWidgetId = null;
+function ensureTurnstile() {
+  const key = window.TURNSTILE_SITE_KEY;
+  const box = document.getElementById('turnstile-box');
+  if (!key || !box || box.dataset.loaded) return;
+  box.dataset.loaded = '1';
+  window._tsOnload = () => { try { tsWidgetId = window.turnstile.render('#turnstile-box', { sitekey: key, theme: 'auto', language: 'de' }); } catch (e) { console.warn('Turnstile:', e); } };
+  const sc = document.createElement('script');
+  sc.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=_tsOnload&render=explicit';
+  sc.async = true;
+  document.head.appendChild(sc);
+}
+function tsToken() {
+  if (!window.TURNSTILE_SITE_KEY) return undefined;
+  try { return (window.turnstile && tsWidgetId !== null) ? (window.turnstile.getResponse(tsWidgetId) || undefined) : undefined; } catch { return undefined; }
+}
+// Turnstile-Tokens sind Einweg-Tokens: nach jedem Versuch neu laden
+function tsReset() { try { if (window.turnstile && tsWidgetId !== null) window.turnstile.reset(tsWidgetId); } catch {} }
+function tsMissing() { return !!window.TURNSTILE_SITE_KEY && !tsToken(); }
+
 function showAuth(msg) {
   authScreenEl.style.display = '';
   appWrapEl.style.display = 'none';
   if (msg) authStatusEl.textContent = msg;
+  ensureTurnstile();
 }
 
 document.getElementById('auth-form').addEventListener('submit', async (e) => {
@@ -1291,26 +1305,30 @@ document.getElementById('auth-form').addEventListener('submit', async (e) => {
     finally { authLoginBtnEl.disabled = false; }
     return;
   }
+  if (tsMissing()) { authStatusEl.textContent = 'Bitte kurz die Sicherheitsprüfung unten abschließen.'; return; }
   authStatusEl.textContent = 'Anmelden…'; authLoginBtnEl.disabled = true; authSignupBtnEl.disabled = true;
-  try { await self.DB.signIn(authEmailEl.value.trim(), authPasswordEl.value); await startAppAfterAuth(); }
-  catch (err) { authStatusEl.textContent = err.message || 'Anmeldung fehlgeschlagen.'; }
+  try { await self.DB.signIn(authEmailEl.value.trim(), authPasswordEl.value, tsToken()); await startAppAfterAuth(); }
+  catch (err) { authStatusEl.textContent = err.message || 'Anmeldung fehlgeschlagen.'; tsReset(); }
   finally { authLoginBtnEl.disabled = false; authSignupBtnEl.disabled = false; }
 });
 document.getElementById('auth-forgot').addEventListener('click', async (e) => {
   e.preventDefault();
   const email = authEmailEl.value.trim();
   if (!email) { authStatusEl.textContent = 'Bitte erst oben deine E-Mail-Adresse eintragen, dann den Link klicken.'; return; }
+  if (tsMissing()) { authStatusEl.textContent = 'Bitte kurz die Sicherheitsprüfung unten abschließen.'; return; }
   authStatusEl.textContent = 'Sende E-Mail…';
-  try { await self.DB.resetPassword(email); authStatusEl.textContent = 'E-Mail zum Zurücksetzen ist unterwegs – auch im Spam-Ordner nachsehen.'; }
+  try { await self.DB.resetPassword(email, tsToken()); authStatusEl.textContent = 'E-Mail zum Zurücksetzen ist unterwegs – auch im Spam-Ordner nachsehen.'; }
   catch (err) { authStatusEl.textContent = err.message || 'Konnte die E-Mail nicht senden.'; }
+  tsReset();
 });
 authSignupBtnEl.addEventListener('click', async () => {
+  if (tsMissing()) { authStatusEl.textContent = 'Bitte kurz die Sicherheitsprüfung unten abschließen.'; return; }
   authStatusEl.textContent = 'Registriere…'; authLoginBtnEl.disabled = true; authSignupBtnEl.disabled = true;
   try {
-    const data = await self.DB.signUp(authEmailEl.value.trim(), authPasswordEl.value);
+    const data = await self.DB.signUp(authEmailEl.value.trim(), authPasswordEl.value, tsToken());
     if (data && data.session) { await startAppAfterAuth(); }
     else { authStatusEl.textContent = 'Registriert! Falls eine Bestätigungsmail kommt, bitte bestätigen und dann anmelden.'; }
-  } catch (err) { authStatusEl.textContent = err.message || 'Registrierung fehlgeschlagen.'; }
+  } catch (err) { authStatusEl.textContent = err.message || 'Registrierung fehlgeschlagen.'; tsReset(); }
   finally { authLoginBtnEl.disabled = false; authSignupBtnEl.disabled = false; }
 });
 
@@ -1355,7 +1373,33 @@ function refText(c) {
 }
 
 // ---- Dashboard (Startseite) ----
+function renderShopInfo() {
+  const SI = window.SHOP_INFO || {};
+  document.getElementById('db-pricenote').textContent = SI.priceNote || '';
+  const hours = (SI.hours || []).map(([d, z]) =>
+    `<div class="row" style="gap:10px"><span style="width:110px;color:var(--muted)">${escapeHtml(d)}</span><span${/geschlossen/i.test(z)?' style="color:var(--muted)"':''}>${escapeHtml(z)}</span></div>`).join('');
+  document.getElementById('db-shop').innerHTML = `
+    <h3>🏪 ${escapeHtml(SI.name || 'Unser Shop')}</h3>
+    ${SI.slogan ? `<p style="color:#c7cdd6;margin:6px 0"><b>${escapeHtml(SI.slogan)}</b></p>` : ''}
+    ${SI.description ? `<p style="color:#c7cdd6;margin:6px 0">${escapeHtml(SI.description)}</p>` : ''}
+    <div class="mv-cols" style="margin-top:12px">
+      <div>
+        <div class="ac-label" style="margin-bottom:6px">ADRESSE &amp; KONTAKT</div>
+        <p style="color:#c7cdd6;margin:0">${(SI.address || []).map(escapeHtml).join('<br />')}</p>
+        <p style="color:#c7cdd6;margin:6px 0 0">${SI.phone ? 'Telefon: ' + escapeHtml(SI.phone) + '<br />' : ''}${SI.email ? `E-Mail: <a href="mailto:${escapeHtml(SI.email)}">${escapeHtml(SI.email)}</a>` : ''}</p>
+      </div>
+      <div>
+        <div class="ac-label" style="margin-bottom:6px">ÖFFNUNGSZEITEN</div>
+        ${hours}
+      </div>
+    </div>`;
+  document.getElementById('db-news').innerHTML = `
+    <h3>✨ Neu in der App</h3>
+    ${(SI.news || []).map(n => `<p style="color:#c7cdd6;margin:5px 0">${escapeHtml(n)}</p>`).join('')}`;
+}
+
 async function loadDashboard() {
+  renderShopInfo();
   const el = document.getElementById('db-stats');
   const stat = (k, v, sub) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div>${sub?`<div class="sub">${sub}</div>`:''}</div>`;
   el.innerHTML = stat('Sammlungswert', '…') + stat('Community-Angebote', '…') + stat('Wunschliste', '…') + stat('Offen für dich', '…');

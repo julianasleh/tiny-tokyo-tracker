@@ -3,11 +3,12 @@
 // selbst beantwortet (siehe window.fetch-Override in index.html) -- der Service
 // Worker muss dafuer nichts mehr tun.
 
-const CACHE_VERSION = 'ttt-shell-v17';
+const CACHE_VERSION = 'ttt-shell-v18';
 const APP_SHELL = [
   './',
   './index.html',
   './config.js',
+  './content.js',
   './db-supabase.js',
   './adapters-browser.js',
   './server-logic.js',
