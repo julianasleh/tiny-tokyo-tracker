@@ -271,6 +271,19 @@
   .set-count { font-size:.78rem; color:var(--muted); margin:10px 0 0; }
   .sp-type { font-size:.62rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--gold); border:1px solid var(--border); border-radius:5px; padding:1px 6px; margin-left:6px; }
 
+#toasts { position:fixed; right:16px; bottom:16px; z-index:300; display:flex; flex-direction:column; gap:8px; }
+.toast { background:var(--surface-2); border:1px solid var(--border); border-left:3px solid var(--gold); color:var(--text); padding:10px 14px; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.4); display:flex; gap:12px; align-items:center; font-size:.9rem; max-width:340px; animation:toastin .18s ease; }
+@keyframes toastin { from { transform:translateY(8px); opacity:0; } }
+.toast button { background:transparent; border:none; color:var(--gold); font-weight:700; cursor:pointer; padding:0; }
+.bottomnav { display:none; }
+@media (max-width:760px) {
+  .bottomnav { display:flex; position:fixed; left:0; right:0; bottom:0; z-index:120; background:var(--surface); border-top:1px solid var(--border); padding:6px 4px calc(6px + env(safe-area-inset-bottom)); justify-content:space-around; }
+  .bottomnav a { text-decoration:none; color:var(--muted); font-size:1.15rem; text-align:center; line-height:1.15; padding:2px 8px; border-radius:8px; }
+  .bottomnav a span { display:block; font-size:.62rem; font-weight:600; }
+  .bottomnav a.active { color:var(--gold); }
+  .wrap { padding-bottom:130px; }
+  #toasts { bottom:76px; }
+}
 .auth-screen { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
 .auth-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:28px; width:100%; max-width:360px; }
 .auth-card label { display:block; font-size:13px; color:var(--muted); margin-top:12px; }
@@ -386,6 +399,7 @@
     </div>
     <div class="an-grid" id="db-stats"></div>
     <p class="msub" id="db-pricenote" style="margin:0 0 14px"></p>
+    <div class="an-card" id="db-quests" style="display:none"></div>
     <div class="an-card" id="db-shop"></div>
     <div class="an-card" id="db-news"></div>
     <p class="msub" style="text-align:center"><a href="legal.html#impressum">Impressum</a> · <a href="legal.html#datenschutz">Datenschutz</a> · <a href="legal.html#disclaimer">Disclaimer</a></p>
@@ -485,6 +499,7 @@
         <option value="all">Alle</option>
       </select>
       <select id="c-lang" title="nach Sprache filtern"><option value="">alle Sprachen</option></select>
+      <button class="chip" id="c-select" title="Mehrere Karten auswählen und gemeinsam bearbeiten">☑ Auswählen</button>
       <select id="c-sort">
         <option value="value-desc">Wert ↓</option>
         <option value="value-asc">Wert ↑</option>
@@ -493,6 +508,15 @@
       </select>
     </div>
 
+    <div class="filterbar row" id="c-batch" style="display:none;border-color:var(--gold)">
+      <b><span id="c-batch-count">0</span> ausgewählt</b>
+      <span class="ci-spacer"></span>
+      <button class="chip" id="cb-sale">Zum Verkauf anbieten</button>
+      <button class="chip" id="cb-unsale">Verkauf beenden</button>
+      <button class="chip" id="cb-del" style="color:#e06a6a">Löschen</button>
+      <button class="chip" id="cb-cancel">Fertig</button>
+    </div>
+    <div class="hint" id="c-count" style="margin:-6px 0 10px"></div>
     <div id="collection"></div>
   </section>
 
@@ -977,6 +1001,14 @@
 </div>
 
 <!-- Nutzer-Profil -->
+<nav class="bottomnav" id="bottomnav">
+  <a href="#/dashboard" data-view="dashboard">🏠<span>Start</span></a>
+  <a href="#/suche" data-view="suche">🔍<span>Suche</span></a>
+  <a href="#/sammlung" data-view="sammlung">📚<span>Sammlung</span></a>
+  <a href="#/community" data-view="community">🤝<span>Community</span></a>
+  <a href="#/einstellungen" data-view="einstellungen">⚙️<span>Mehr</span></a>
+</nav>
+
 <div class="modal-bg" id="profile-modal">
   <div class="modal" style="max-width:540px;position:relative">
     <button class="detail-close" id="pf-close" title="Schließen">✕</button>
@@ -1362,6 +1394,31 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 const eur = (n) => (n ?? 0).toLocaleString('de-DE',{style:'currency',currency:'EUR'});
 // Währungsbewusste Formatierung (€ für Cardmarket, $ für One Piece / TCGPlayer)
+// Dezente Meldung unten rechts (ersetzt blockierende alert()-Fenster)
+function toast(msg, opts) {
+  opts = opts || {};
+  let box = document.getElementById('toasts');
+  if (!box) { box = document.createElement('div'); box.id = 'toasts'; document.body.appendChild(box); }
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `<span>${escapeHtml(msg)}</span>`;
+  if (opts.undo) {
+    const b = document.createElement('button'); b.textContent = 'Rückgängig';
+    b.addEventListener('click', () => { el.remove(); opts.undo(); });
+    el.appendChild(b);
+  }
+  box.appendChild(el);
+  setTimeout(() => el.remove(), opts.undo ? 6500 : 3000);
+}
+// Relative Zeitangabe ("vor 2 Std.")
+function relTime(ts) {
+  const d = Date.now() - new Date(ts).getTime();
+  if (d < 60e3) return 'gerade eben';
+  if (d < 3600e3) return 'vor ' + Math.round(d / 60e3) + ' Min.';
+  if (d < 86400e3) return 'vor ' + Math.round(d / 3600e3) + ' Std.';
+  if (d < 14 * 86400e3) return 'vor ' + Math.round(d / 86400e3) + ' Tagen';
+  return new Date(ts).toLocaleDateString('de-DE');
+}
 const fmt = (n, cur='EUR') => (n ?? 0).toLocaleString(cur==='USD'?'en-US':'de-DE',{style:'currency',currency:cur});
 const GAME_LABEL = { pokemon:'Pokémon', magic:'Magic', yugioh:'Yu-Gi-Oh', onepiece:'One Piece' };
 const FLAGS = { de:'🇩🇪', en:'🇬🇧', fr:'🇫🇷', es:'🇪🇸', it:'🇮🇹', pt:'🇵🇹', 'pt-br':'🇧🇷', 'pt-pt':'🇵🇹', nl:'🇳🇱', pl:'🇵🇱', ru:'🇷🇺', ja:'🇯🇵', ko:'🇰🇷', 'zh-tw':'🇹🇼', 'zh-cn':'🇨🇳', id:'🇮🇩', th:'🇹🇭', zhs:'🇨🇳', zht:'🇹🇼' };
@@ -1413,8 +1470,43 @@ function renderShopInfo() {
     ${(SI.news || []).map(n => `<p style="color:#c7cdd6;margin:5px 0">${escapeHtml(n)}</p>`).join('')}`;
 }
 
+function renderQuests(p) {
+  const box = document.getElementById('db-quests');
+  const profDone = [p.name && p.name !== 'Sammler', p.country, p.bio, p.contact].filter(Boolean).length;
+  const Q = [
+    { icon:'👤', label:'Community-Profil vervollständigen', hint:'+50 P.', cur: profDone, max: 4 },
+    { icon:'📚', label:'10 Karten in die Sammlung legen', hint:'1 P. je Karte', cur: Math.min(p.total_cards || 0, 10), max: 10 },
+    { icon:'🛒', label:'3 Karten zum Verkauf anbieten', hint:'15 P. je Angebot', cur: Math.min(p.active_offers || 0, 3), max: 3 },
+    { icon:'🤝', label:'Ersten Trade abschließen', hint:'100 P. je Trade', cur: Math.min(p.trades_done || 0, 1), max: 1 },
+    { icon:'⭐', label:'5 Feedbacks geben', hint:'20 P. je Feedback', cur: Math.min(p.fb_given || 0, 5), max: 5 },
+    { icon:'🔄', label:'10 Trades abschließen', hint:'🥉-Abzeichen', cur: Math.min(p.trades_done || 0, 10), max: 10 },
+    { icon:'🌍', label:'Mit 3 Ländern handeln', hint:'Erfolg', cur: Math.min(p.traded_countries || 0, 3), max: 3 },
+  ];
+  const lv = levelFor(p.points);
+  const next = lv.n < LEVELS.length ? LEVELS[lv.n] : null;
+  box.style.display = '';
+  box.innerHTML = `<h3>🎯 Deine Quests <small style="color:var(--muted)">· Lv. ${lv.n} ${lv.name} · ${p.points || 0} P.${next ? ' · noch ' + Math.max(0, next[0] - (p.points || 0)) + ' P. bis Lv. ' + (lv.n + 1) + ' (' + next[1] + ')' : ''}</small></h3>` +
+    Q.map(q => {
+      const done = q.cur >= q.max;
+      return `<div class="bar-row" style="${done ? 'opacity:.55' : ''}">
+        <span class="lab" style="width:250px">${q.icon} ${escapeHtml(q.label)}${done ? ' ✓' : ''}</span>
+        <span class="bar-track"><span class="bar-fill" style="width:${Math.max(3, q.cur / q.max * 100).toFixed(0)}%${done ? ';background:#5bd08a' : ''}"></span></span>
+        <span class="bar-val" style="width:auto;white-space:nowrap">${q.cur}/${q.max} <small style="color:var(--muted)">${q.hint}</small></span></div>`;
+    }).join('');
+}
+
 async function loadDashboard() {
   renderShopInfo();
+  // Quests + Level (eigenes Profil)
+  (async () => {
+    try {
+      const s = await self.DB.getSession();
+      if (!s || !s.user) return;
+      const r = await fetch('api/profile/' + s.user.id);
+      const d = await r.json();
+      if (r.ok && d.profile) renderQuests(d.profile);
+    } catch {}
+  })();
   const el = document.getElementById('db-stats');
   const stat = (k, v, sub) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div>${sub?`<div class="sub">${sub}</div>`:''}</div>`;
   el.innerHTML = stat('Sammlungswert', '…') + stat('Community-Angebote', '…') + stat('Wunschliste', '…') + stat('Offen für dich', '…');
@@ -1462,6 +1554,9 @@ function route() {
   const sub = document.getElementById('bestand-subnav');
   sub.style.display = BESTAND.includes(target) ? '' : 'none';
   sub.querySelectorAll('a').forEach(a => a.classList.toggle('active', a.dataset.sub===target));
+  document.querySelectorAll('.bottomnav a').forEach(a => a.classList.toggle('active',
+    a.dataset.view===target || (a.dataset.view==='sammlung' && BESTAND.includes(target))));
+  if (target === 'suche' && window.innerWidth > 760) setTimeout(() => { try { document.getElementById('query').focus(); } catch {} }, 60);
   if (target==='dashboard') loadDashboard();
   if (target==='sammlung') { loadCollection(); recordOpenSnapshot().then(loadHistory); }
   if (target==='wunschliste') loadWishlist();
@@ -1477,6 +1572,12 @@ async function recordOpenSnapshot() {
   try { await fetch('api/collection/snapshot', { method:'POST' }); } catch {}
 }
 window.addEventListener('hashchange', route);
+document.addEventListener('keydown', e => {
+  if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '')) {
+    e.preventDefault(); location.hash = '#/suche';
+    setTimeout(() => { try { document.getElementById('query').focus(); } catch {} }, 80);
+  }
+});
 
 // ---- Suche ----
 let lastResults = [];
@@ -1700,6 +1801,7 @@ function renderCard(c) {
         ${cmLink(c.cardmarketUrl)}
       </div>
       <div class="card-actions">
+        <button class="add" data-act="quick" title="Sofort hinzufügen (×1, NM, Suchsprache)" style="flex:0 0 auto;border-right:1px solid var(--border)">⚡+1</button>
         <button class="add" data-act="add">+ Sammlung</button>
         <button class="wish" data-act="wish" title="Auf die Wunschliste setzen">♡</button>
       </div>
@@ -1719,13 +1821,14 @@ function renderListView(list) {
       <td class="num hide-sm">${c.priceLow!=null?fmt(c.priceLow,c.currency):'–'}</td>
       <td class="num hide-sm">${c.priceTrend!=null?fmt(c.priceTrend,c.currency):'–'}</td>
       <td class="num">${cmLink(c.cardmarketUrl)}</td>
-      <td class="num"><button class="ladd" data-act="add" title="In Sammlung">+</button></td>
+      <td class="num"><button class="ladd" data-act="quick" title="Sofort hinzufügen (×1, NM)">⚡</button></td>
+      <td class="num"><button class="ladd" data-act="add" title="In Sammlung (mit Dialog)">+</button></td>
       <td class="num"><button class="ladd lwish" data-act="wish" title="Auf die Wunschliste">♡</button></td>
     </tr>`;
   }).join('');
   return `<table class="list">
     <thead><tr><th>Name</th><th class="hide-sm">Seltenheit</th><th class="num">Nummer</th>
-    <th class="num">Preis</th><th class="num hide-sm">Ab</th><th class="num hide-sm">Trend</th><th></th><th></th><th></th></tr></thead>
+    <th class="num">Preis</th><th class="num hide-sm">Ab</th><th class="num hide-sm">Trend</th><th></th><th></th><th></th><th></th></tr></thead>
     <tbody>${rows}</tbody></table>`;
 }
 
@@ -1748,7 +1851,8 @@ async function loadCollection() {
 // Sprachfilter der Sammlung mit den tatsächlich vorhandenen Sprachen füllen
 function buildCollectionLangFilter() {
   const sel = document.getElementById('c-lang');
-  const prev = sel.value;
+  const prev = sel.value || window._cLangPref || '';
+  window._cLangPref = '';
   const langs = [...new Set(collectionCards.map(c => (c.language||'').toLowerCase()).filter(Boolean))].sort();
   const label = (code) => { const found = (META.languages.pokemon||[]).concat(META.languages.magic||[]).find(([c])=>c===code); return found ? found[1] : code.toUpperCase(); };
   sel.innerHTML = '<option value="">alle Sprachen</option>' +
@@ -1773,10 +1877,69 @@ function renderCollection() {
   else if (sort==='name') list = [...list].sort((a,b)=>a.name.localeCompare(b.name));
   else list = [...list].sort((a,b)=> (a.added_at<b.added_at?1:-1));
   renderHero();
+  // Gefilterte Summe anzeigen + Filter merken
+  try {
+    const eurV = list.filter(c => (c.currency || 'EUR') !== 'USD').reduce((s2, c) => s2 + lineVal(c), 0);
+    const usdV = list.filter(c => (c.currency || 'EUR') === 'USD').reduce((s2, c) => s2 + lineVal(c), 0);
+    const qty = list.reduce((s2, c) => s2 + c.quantity, 0);
+    document.getElementById('c-count').textContent = list.length
+      ? `${list.length} Positionen · ${qty} Karten · Wert der Auswahl: ${fmt(eurV, 'EUR')}${usdV > 0 ? ' + ' + fmt(usdV, 'USD') : ''}`
+      : '';
+    localStorage.setItem('tcg-cfilters', JSON.stringify({ g: activeGame, q: term, sort, lang, status }));
+  } catch {}
   if (!collectionCards.length) { el.innerHTML = '<div class="empty">Noch keine Karten. Geh auf „Suche" und tippe bei einer Karte auf „In Sammlung".</div>'; return; }
   if (!list.length) { el.innerHTML = '<div class="empty">Keine Karten passen zum Filter.</div>'; return; }
   el.innerHTML = list.map(renderCollectionItem).join('');
 }
+
+// ---- Mehrfachauswahl in der Sammlung ----
+let selectMode = false;
+const selectedIds = new Set();
+function updateBatchBar() {
+  document.getElementById('c-batch').style.display = selectMode ? '' : 'none';
+  document.getElementById('c-batch-count').textContent = selectedIds.size;
+  document.getElementById('c-select').classList.toggle('active', selectMode);
+}
+document.getElementById('c-select').addEventListener('click', () => {
+  selectMode = !selectMode;
+  if (!selectMode) selectedIds.clear();
+  updateBatchBar(); renderCollection();
+});
+document.getElementById('cb-cancel').addEventListener('click', () => { selectMode = false; selectedIds.clear(); updateBatchBar(); renderCollection(); });
+document.getElementById('collection').addEventListener('change', e => {
+  if (!e.target.classList.contains('msel')) return;
+  const id = Number(e.target.closest('.collection-item').dataset.id);
+  if (e.target.checked) selectedIds.add(id); else selectedIds.delete(id);
+  updateBatchBar();
+});
+async function batchRun(worker, label) {
+  const ids = [...selectedIds];
+  if (!ids.length) { toast('Erst Karten ankreuzen.'); return; }
+  for (const id of ids) { try { await worker(id); } catch {} }
+  selectedIds.clear(); selectMode = false; updateBatchBar();
+  await loadCollection();
+  toast(`${label} (${ids.length} Karten) ✓`);
+}
+document.getElementById('cb-sale').addEventListener('click', () => batchRun(
+  id => fetch('api/collection/' + id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ for_sale: true }) }), 'Zum Verkauf markiert'));
+document.getElementById('cb-unsale').addEventListener('click', () => batchRun(
+  id => fetch('api/collection/' + id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ for_sale: false }) }), 'Verkauf beendet'));
+document.getElementById('cb-del').addEventListener('click', () => {
+  if (!selectedIds.size) { toast('Erst Karten ankreuzen.'); return; }
+  if (!confirm(`${selectedIds.size} Karten endgültig löschen?`)) return;
+  batchRun(id => fetch('api/collection/' + id, { method:'DELETE' }), 'Gelöscht');
+});
+// Gemerkte Filter wiederherstellen
+(function restoreCollectionFilters() {
+  try {
+    const f = JSON.parse(localStorage.getItem('tcg-cfilters') || '{}');
+    if (f.sort) document.getElementById('c-sort').value = f.sort;
+    if (f.status) document.getElementById('c-status').value = f.status;
+    if (f.q) document.getElementById('c-search').value = f.q;
+    if (f.g) { activeGame = f.g; document.querySelectorAll('#game-chips .chip').forEach(c => c.classList.toggle('active', c.dataset.game === f.g)); }
+    if (f.lang) window._cLangPref = f.lang;
+  } catch {}
+})();
 
 function plBadge(absVal, basis, cur, label) {
   if (basis == null || basis === 0) return '';
@@ -1808,7 +1971,7 @@ function renderCollectionItem(c) {
   const buyInfo = c.purchase_price != null ? ` · Kauf ${fmt(c.purchase_price, cur)}` : '';
 
   return `
-    <div class="collection-item" data-id="${c.id}" style="${sold?'opacity:.72':''}">
+    <div class="collection-item" data-id="${c.id}" style="${sold?'opacity:.72':''}">${selectMode?`<input type="checkbox" class="msel" ${selectedIds.has(c.id)?'checked':''} style="width:auto;transform:scale(1.25);accent-color:var(--gold)" />`:''}
       ${c.image_url ? `<img src="${c.image_url}" alt="" data-act="detail" title="Details ansehen" />` : ''}
       <div class="ci-main">
         <div class="ci-name">${escapeHtml(c.name)}${sold?'<span class="badge-sold">verkauft</span>':''}${(!sold && c.for_sale)?'<span class="badge-target">Zum Verkauf</span>':''}</div>
@@ -1954,7 +2117,7 @@ function renderChart() {
 }
 
 // ---- Aktionen ----
-async function addToCollection(card) {
+async function addToCollection(card, autoMerge) {
   if (card.lang) card.language = card.lang;
   // Duplikat-Erkennung: gleiche Karte in gleicher Sprache schon im Bestand?
   try {
@@ -1963,17 +2126,17 @@ async function addToCollection(card) {
       && String(x.language || '').toLowerCase() === String(card.language || '').toLowerCase() && x.status !== 'sold');
     if (existing) {
       const add = Math.max(1, card.quantity || 1);
-      if (confirm(`„${card.name}" (${flagFor(card.language) || card.language}) ist schon ×${existing.quantity} in deiner Sammlung.\n\nOK = Menge um ${add} erhöhen · Abbrechen = trotzdem separat anlegen`)) {
+      if (autoMerge || confirm(`„${card.name}" (${flagFor(card.language) || card.language}) ist schon ×${existing.quantity} in deiner Sammlung.\n\nOK = Menge um ${add} erhöhen · Abbrechen = trotzdem separat anlegen`)) {
         await fetch('api/collection/' + existing.id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ quantity: existing.quantity + add }) });
         await loadCollection();
-        document.getElementById('search-status').textContent = `Menge von „${card.name}" auf ×${existing.quantity + add} erhöht.`;
+        toast(`„${card.name}" – Menge auf ×${existing.quantity + add} erhöht`);
         return;
       }
     }
   } catch {}
   await fetch('api/collection',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(card)});
   await loadCollection();
-  document.getElementById('search-status').textContent = `„${card.name}" (${flagFor(card.language)||card.language}) zur Sammlung hinzugefügt.`;
+  toast(`„${card.name}" (${(card.language||'').toUpperCase()}) zur Sammlung hinzugefügt ✓`);
 }
 
 // ---- Wunschliste ----
@@ -2152,7 +2315,7 @@ function renderCommunity() {
     const cflag = countryFlag(c.seller_country);
     return `
     <div class="collection-item" data-sid="${escapeHtml(c.seller_id||'')}" data-sname="${escapeHtml(c.seller_name||'Sammler')}" data-cname="${escapeHtml(c.name||'')}" data-cid="${c.id}" data-game="${escapeHtml(c.game||'')}" data-price="${c.asking_price ?? c.price_current ?? ''}" data-cur="${escapeHtml(c.currency||'EUR')}">
-      ${c.image_url ? `<img src="${c.image_url}" alt="" loading="lazy" />` : ''}
+      ${c.image_url ? `<img src="${c.image_url}" alt="" loading="lazy" data-act="zoom" style="cursor:zoom-in" title="Bild vergrößern" />` : ''}
       <div class="ci-main">
         <div class="ci-name">${escapeHtml(c.name)}${c.quantity>1?` ×${c.quantity}`:''}${c.is_mine?'<span class="badge-target">dein Angebot</span>':''}${isWishMatch(c)?'<span class="badge-target">🎯 Wunschliste</span>':''}</div>
         <div class="ci-sub">${GAME_LABEL[c.game]||c.game} · <span class="flag">${flagFor(c.language)}</span>${escapeHtml(c.set_name||'')}${ref?` · <b>${escapeHtml(ref)}</b>`:''} · Zustand ${escapeHtml(c.condition||'–')}</div>
@@ -2169,7 +2332,20 @@ function bindWishOnly() {
   const wb = document.getElementById('cm-wishonly');
   if (wb) wb.addEventListener('click', ()=>{ cmWishOnly = !cmWishOnly; renderCommunity(); });
 }
+function openZoom(src) {
+  let z = document.getElementById('zoom-overlay');
+  if (!z) {
+    z = document.createElement('div'); z.id = 'zoom-overlay';
+    z.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:400;cursor:zoom-out;padding:18px';
+    z.addEventListener('click', () => { z.style.display = 'none'; });
+    document.body.appendChild(z);
+  }
+  z.innerHTML = `<img src="${src}" style="max-width:94%;max-height:94%;border-radius:12px" />`;
+  z.style.display = 'flex';
+}
 document.getElementById('community-list').addEventListener('click', e=>{
+  const zoomImg = e.target.closest('[data-act="zoom"]');
+  if (zoomImg) { openZoom(zoomImg.src.replace('/low.webp', '/high.webp')); return; }
   const prof = e.target.closest('[data-act="profile"]');
   if (prof && prof.dataset.uid) { openProfile(prof.dataset.uid); return; }
   const item = e.target.closest('.collection-item'); if (!item) return;
@@ -2243,7 +2419,7 @@ async function loadInbox() {
       <div class="ci-main">
         <div class="ci-name">${m.incoming ? 'Von' : 'An'} <span data-act="uprofile" style="cursor:pointer;border-bottom:1px dotted var(--muted)" title="Profil ansehen">${escapeHtml(m.incoming ? m.from_name : m.to_name)}</span>${m.card_name ? ` <small style="color:var(--muted)">· ${escapeHtml(m.card_name)}</small>` : ''}${(m.incoming && !m.read) ? '<span class="badge-target">neu</span>' : ''}</div>
         <div class="ci-sub" style="white-space:pre-wrap">${escapeHtml(m.body)}</div>
-        <div class="ci-sub">${new Date(m.created_at).toLocaleString('de-DE')}</div>
+        <div class="ci-sub" title="${new Date(m.created_at).toLocaleString('de-DE')}">${relTime(m.created_at)}</div>
       </div>
       <div class="ci-spacer"></div>
       ${m.incoming ? '<button class="wtocoll" data-act="reply">↩ Antworten</button>' : ''}
@@ -2343,7 +2519,7 @@ async function loadTrades() {
         <div class="ci-name">${escapeHtml(t.card_name)} ${tradeStatusChip(t.status)}</div>
         <div class="ci-sub">${t.i_am_proposer ? 'Angefragt bei' : 'Anfrage von'} <span data-act="t-profile" style="cursor:pointer;border-bottom:1px dotted var(--muted)">${escapeHtml(partnerName||'Sammler')}</span>${t.price != null ? ` · ${fmt(t.price, t.currency||'EUR')}` : ''}${t.card_game && GAME_LABEL[t.card_game] ? ` · ${GAME_LABEL[t.card_game]}` : ''}</div>
         ${t.message ? `<div class="ci-sub" style="white-space:pre-wrap">„${escapeHtml(t.message)}"</div>` : ''}
-        <div class="ci-sub">${new Date(t.updated_at).toLocaleString('de-DE')}${t.status==='angenommen' ? ` · Bestätigt: du ${myDone?'✔':'–'} / Partner ${otherDone?'✔':'–'}` : ''}</div>
+        <div class="ci-sub" title="${new Date(t.updated_at).toLocaleString('de-DE')}">${relTime(t.updated_at)}${t.status==='angenommen' ? ` · Bestätigt: du ${myDone?'✔':'–'} / Partner ${otherDone?'✔':'–'}` : ''}</div>
       </div>
       <div class="ci-spacer"></div>
       ${btns.join(' ')}
@@ -2450,7 +2626,7 @@ async function loadBoard() {
       <span class="nm">${countryFlag(r2.country)?countryFlag(r2.country)+' ':''}${escapeHtml(r2.name||'Sammler')}${r2.is_me?' <small>(du)</small>':''} <small style="color:var(--muted)">Lv. ${levelFor(r2.points).n} ${levelFor(r2.points).name}</small></span>
       <span class="vl">${r2.points} P.</span>
     </div>`).join('') +
-    `<p class="msub" style="margin-top:10px">Punkte: 10 je Karte in der Sammlung · 25 je aktives Verkaufsangebot · 50 je verkaufte Karte · 5 je Wunschlisten-Eintrag.</p></div>`;
+    `<p class="msub" style="margin-top:10px">Punkte gibt es vor allem für Teilnahme: <b>100</b> je abgeschlossenem Trade · <b>25</b> je positivem erhaltenen Feedback · <b>20</b> je gegebenem Feedback · 15 je aktives Angebot · 30 je Verkauf · +50 für ein vollständiges Profil · 1 je Karte/Wunsch.</p></div>`;
 }
 
 // ---- Community-Profil (Einstellungen) ----
@@ -3161,7 +3337,13 @@ document.getElementById('results').addEventListener('click', e=>{
   if (act==='wish') addToWishlist(card);
   else if (act==='detail') openDetail(card);
   else if (act==='add') openAddModal(card);
+  else if (act==='quick') quickAdd(card);
 });
+async function quickAdd(c) {
+  const card = { ...c, language: c.lang || document.getElementById('lang').value || 'de', quantity: 1, condition: 'NM' };
+  delete card.needsDetail; delete card.lang;
+  await addToCollection(card, true);
+}
 document.getElementById('am-lang').addEventListener('change', updateModalPriceForLang);
 document.getElementById('am-confirm').addEventListener('click', confirmAdd);
 document.getElementById('am-cancel').addEventListener('click', closeAddModal);
@@ -3171,7 +3353,22 @@ document.getElementById('collection').addEventListener('click', e=>{
   const id = Number(item.dataset.id); const card = collectionCards.find(c=>c.id===id); const act = e.target.dataset.act;
   if (act==='inc') patchCard(id,{quantity:card.quantity+1});
   else if (act==='dec') patchCard(id,{quantity:Math.max(1,card.quantity-1)});
-  else if (act==='del') removeCard(id);
+  else if (act==='del') {
+    const c = collectionCards.find(x => x.id === id);
+    removeCard(id).then(() => {
+      if (!c) return;
+      toast(`„${c.name}" gelöscht`, { undo: async () => {
+        await fetch('api/collection', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+          game: c.game, externalId: c.external_id, name: c.name, setName: c.set_name, setCode: c.set_code,
+          number: c.number, rarity: c.rarity, imageUrl: c.image_url, cardmarketUrl: c.cardmarket_url,
+          quantity: c.quantity, condition: c.condition, language: c.language, notes: c.notes,
+          cardmarketPrice: c.price_current ?? c.price_at_add, priceLow: c.price_low, priceTrend: c.price_trend,
+          currency: c.currency || 'EUR', purchasePrice: c.purchase_price, purchaseDate: c.purchase_date,
+        }) });
+        loadCollection();
+      } });
+    });
+  }
   else if (act==='price') editPrice(item, card);
   else if (act==='edit') openEditModal(card);
   else if (act==='detail') openDetail(card, { histId:id });
