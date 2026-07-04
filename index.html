@@ -663,17 +663,15 @@
 
   <!-- ============ INFO ============ -->
   <section class="view" id="view-einstellungen">
-    <div class="info-card">
-      <h3>Darstellung</h3>
-      <div class="row" style="gap:22px;align-items:center;flex-wrap:wrap">
-        <div class="set-line"><span class="set-lbl">Modus</span>
-          <button class="theme-toggle" id="theme-toggle" title="Hell-/Dunkelmodus umschalten">🌙</button></div>
-        <div class="set-line"><span class="set-lbl">Akzentfarbe</span>
-          <span class="swatches" id="swatches" title="Akzentfarbe wählen"></span></div>
-      </div>
-      <p class="msub" style="margin-top:10px">Hell- oder Dunkelmodus und die Akzentfarbe (in den Tiny-Tokyo-Farben) werden gespeichert und beim nächsten Start wiederhergestellt.</p>
+    <div class="filterbar row" id="set-tabs">
+      <button class="chip active" data-tab="profil">👤 Profil &amp; Konto</button>
+      <button class="chip" data-tab="darstellung">🎨 Darstellung</button>
+      <button class="chip" data-tab="daten">💾 Datensicherung</button>
+      <button class="chip" data-tab="erweitert">🔧 Erweitert</button>
+      <button class="chip" data-tab="hilfe">📖 Hilfe</button>
     </div>
 
+    <div id="set-profil">
     <div class="info-card">
       <h3>Community-Profil</h3>
       <p class="msub" style="margin-top:0">Wird nur bei deinen Verkaufsangeboten im Community-Reiter angezeigt. Ohne Anzeigename erscheinst du als „Sammler", ohne Kontakt können dich Interessenten nicht erreichen.</p>
@@ -703,6 +701,37 @@
     </div>
 
     <div class="info-card">
+      <h3>📨 Posteingang</h3>
+      <p class="msub" style="margin-top:0">Deine erhaltenen und gesendeten Nachrichten (auch in der Community unter „Postfach" zu finden).</p>
+      <div id="settings-inbox"></div>
+    </div>
+
+    <div class="info-card">
+      <h3>Konto</h3>
+      <div class="row" style="gap:8px;align-items:center">
+        <button class="ghost" id="logout-btn">Abmelden</button>
+      </div>
+      <p class="msub" style="margin:8px 0 0">Deine Daten bleiben in der Cloud gespeichert und sind nach dem nächsten Anmelden wieder da.</p>
+    </div>
+
+    </div>
+
+    <div id="set-darstellung" style="display:none">
+    <div class="info-card">
+      <h3>Darstellung</h3>
+      <div class="row" style="gap:22px;align-items:center;flex-wrap:wrap">
+        <div class="set-line"><span class="set-lbl">Modus</span>
+          <button class="theme-toggle" id="theme-toggle" title="Hell-/Dunkelmodus umschalten">🌙</button></div>
+        <div class="set-line"><span class="set-lbl">Akzentfarbe</span>
+          <span class="swatches" id="swatches" title="Akzentfarbe wählen"></span></div>
+      </div>
+      <p class="msub" style="margin-top:10px">Hell- oder Dunkelmodus und die Akzentfarbe (in den Tiny-Tokyo-Farben) werden gespeichert und beim nächsten Start wiederhergestellt.</p>
+    </div>
+
+    </div>
+
+    <div id="set-daten" style="display:none">
+    <div class="info-card">
       <h3>Datensicherung &amp; Daten</h3>
       <div class="row" style="gap:8px;flex-wrap:wrap">
         <button class="ghost" id="fullexport-btn" title="Alle Daten als JSON-Datei speichern">Komplett-Backup ⤓</button>
@@ -729,6 +758,9 @@
       </ul>
     </div>
 
+    </div>
+
+    <div id="set-erweitert" style="display:none">
     <div class="info-card">
       <h3>Gegradete Karten (Graded-Reiter) einrichten</h3>
       <p>Der Reiter <b>Graded</b> zeigt Preise gegradeter Pokémon-Karten (PSA, BGS, CGC,
@@ -752,20 +784,14 @@
     </div>
 
     <div class="info-card">
-      <h3>Konto</h3>
-      <div class="row" style="gap:8px;align-items:center">
-        <button class="ghost" id="logout-btn">Abmelden</button>
-      </div>
-      <p class="msub" style="margin:8px 0 0">Deine Daten bleiben in der Cloud gespeichert und sind nach dem nächsten Anmelden wieder da.</p>
-    </div>
-
-    <div class="info-card">
       <h3>Rechtliches</h3>
       <p style="margin:6px 0"><a href="legal.html#impressum">Impressum</a> · <a href="legal.html#datenschutz">Datenschutzerklärung</a> · <a href="legal.html#disclaimer">Disclaimer</a></p>
       <p class="msub" style="margin:6px 0 0">Konto löschen: formlose E-Mail an <a href="mailto:julianasleh@gmail.com">julianasleh@gmail.com</a> genügt – alle Daten werden entfernt.</p>
     </div>
 
-    <h3 class="sealed-h" style="margin-top:28px">📖 Anleitung &amp; Infos</h3>
+    </div>
+
+    <div id="set-hilfe" style="display:none">
     <div class="info-card">
       <h3>Datenquellen &amp; Preise</h3>
       <table>
@@ -896,6 +922,7 @@
       </ul>
       <p>Ausführliche Fassung: Datei <code>ANLEITUNG.md</code> im Projektordner.</p>
     </div>
+  </div>
   </section>
 
   <!-- ============ GRADED ============ -->
@@ -1565,7 +1592,7 @@ function route() {
   if (target==='analyse') { recordOpenSnapshot().then(loadAnalyse); }
   if (target==='graded') loadGraded();
   if (target==='community') { cmShowTab('angebote'); loadCommunity(); }
-  if (target==='einstellungen') loadCommunityProfile();
+  if (target==='einstellungen') { loadCommunityProfile(); setShowTab('profil'); }
 }
 // Bei jedem Öffnen der Sammlung einen aktuellen Verlaufspunkt für heute festlegen.
 async function recordOpenSnapshot() {
@@ -2403,8 +2430,9 @@ async function refreshUnread() {
   } catch {}
 }
 
-async function loadInbox() {
-  const el = document.getElementById('community-inbox');
+async function loadInbox(targetId) {
+  targetId = targetId || 'community-inbox';
+  const el = document.getElementById(targetId);
   el.innerHTML = '<div class="empty">Lade Nachrichten…</div>';
   let items = [];
   try {
@@ -2432,16 +2460,32 @@ async function loadInbox() {
     refreshUnread();
   }
 }
-document.getElementById('community-inbox').addEventListener('click', async e=>{
+async function inboxClick(e) {
   const item = e.target.closest('.collection-item'); if (!item) return;
   const act = e.target.closest('[data-act]')?.dataset.act;
+  const targetId = e.currentTarget.id;
   if (act==='reply') openMsgModal(item.dataset.uid, item.dataset.uname, null);
   else if (act==='uprofile') openProfile(item.dataset.uid);
   else if (act==='mdel') {
     if (!confirm('Nachricht wirklich löschen?')) return;
     await fetch('api/messages/'+item.dataset.mid, { method:'DELETE' });
-    loadInbox();
+    loadInbox(targetId);
   }
+}
+document.getElementById('community-inbox').addEventListener('click', inboxClick);
+document.getElementById('settings-inbox').addEventListener('click', inboxClick);
+
+// ---- Einstellungen: Unterreiter ----
+function setShowTab(tab) {
+  document.querySelectorAll('#set-tabs .chip').forEach(c => c.classList.toggle('active', c.dataset.tab === tab));
+  ['profil','darstellung','daten','erweitert','hilfe'].forEach(t => {
+    const el2 = document.getElementById('set-' + t);
+    if (el2) el2.style.display = t === tab ? '' : 'none';
+  });
+  if (tab === 'profil') loadInbox('settings-inbox');
+}
+document.getElementById('set-tabs').addEventListener('click', e => {
+  const c = e.target.closest('.chip'); if (c) setShowTab(c.dataset.tab);
 });
 
 // ---- Trades (Tauschgeschaefte) ----
