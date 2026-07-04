@@ -23,7 +23,7 @@
   @font-face { font-family:'Space Grotesk'; font-style:normal; font-weight:700; font-display:swap; src:url('lib/fonts/space-grotesk-latin-700-normal.woff2') format('woff2'); }
   :root {
     --bg:#0e1014; --surface:#171b22; --surface-2:#1f242d; --border:#2a313c;
-    --text:#e7eaef; --muted:#8b94a3; --gold:#e7b04b;
+    --text:#e7eaef; --muted:#9aa5b6; --gold:#e7b04b;
     --pokemon:#ffcb05; --magic:#a98bd6; --yugioh:#d98a3d; --onepiece:#e0556a;
     --radius:12px;
   }
@@ -206,6 +206,16 @@
   .top-row .nm small{color:var(--muted);}
   .top-row .vl { color:var(--gold); font-weight:700; }
   .mv-cols { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  /* Quests: feste Spalten, damit alle Balken exakt buendig sind */
+  .quest-row { display:grid; grid-template-columns:minmax(170px,250px) 1fr 135px; gap:12px; align-items:center; margin-bottom:8px; font-size:.86rem; }
+  .quest-row .bar-track { width:100%; }
+  .quest-val { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  @media (max-width:560px) { .quest-row { grid-template-columns:minmax(0,1fr) 110px; } .quest-row .bar-track { grid-column:1 / -1; grid-row:2; } }
+  /* Dashboard: Kennzahlen als einzeilige Stats-Bar */
+  #db-stats { display:flex; flex-wrap:wrap; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:4px 0; margin-bottom:12px; gap:0; }
+  #db-stats .stat { background:transparent; border:none; border-radius:0; border-right:1px solid var(--border); flex:1 1 0; min-width:150px; padding:10px 16px; }
+  #db-stats .stat:last-child { border-right:none; }
+  #db-stats .stat .v { font-size:1.2rem; margin-top:2px; }
   @media(max-width:560px){ .mv-cols{grid-template-columns:1fr;} }
   .mv-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--border); font-size:.84rem; }
   .mv-row:last-child{border-bottom:none;}
@@ -724,6 +734,9 @@
           <button class="theme-toggle" id="theme-toggle" title="Hell-/Dunkelmodus umschalten">🌙</button></div>
         <div class="set-line"><span class="set-lbl">Akzentfarbe</span>
           <span class="swatches" id="swatches" title="Akzentfarbe wählen"></span></div>
+        <div class="set-line"><span class="set-lbl">Textfarbe</span>
+          <input type="color" id="text-color" value="#e7eaef" title="Haupt-Textfarbe global anpassen" style="width:44px;height:28px;padding:2px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;cursor:pointer" />
+          <button class="theme-toggle" id="text-color-reset" title="Standard-Textfarbe wiederherstellen">↺</button></div>
       </div>
       <p class="msub" style="margin-top:10px">Hell- oder Dunkelmodus und die Akzentfarbe (in den Tiny-Tokyo-Farben) werden gespeichert und beim nächsten Start wiederhergestellt.</p>
     </div>
@@ -1476,7 +1489,7 @@ function renderShopInfo() {
   const SI = window.SHOP_INFO || {};
   document.getElementById('db-pricenote').textContent = SI.priceNote || '';
   const hours = (SI.hours || []).map(([d, z]) =>
-    `<div class="row" style="gap:10px"><span style="width:110px;color:var(--muted)">${escapeHtml(d)}</span><span${/geschlossen/i.test(z)?' style="color:var(--muted)"':''}>${escapeHtml(z)}</span></div>`).join('');
+    `<div class="row" style="gap:10px;break-inside:avoid"><span style="width:56px;color:var(--muted)">${escapeHtml(d).slice(0,2)}</span><span${/geschlossen/i.test(z)?' style="color:var(--muted)"':''}>${escapeHtml(z).replace(' Uhr','')}</span></div>`).join('');
   document.getElementById('db-shop').innerHTML = `
     <h3>🏪 ${escapeHtml(SI.name || 'Unser Shop')}</h3>
     ${SI.slogan ? `<p style="color:#c7cdd6;margin:6px 0"><b>${escapeHtml(SI.slogan)}</b></p>` : ''}
@@ -1489,7 +1502,7 @@ function renderShopInfo() {
       </div>
       <div>
         <div class="ac-label" style="margin-bottom:6px">ÖFFNUNGSZEITEN</div>
-        ${hours}
+        <div style="columns:2;column-gap:22px">${hours}</div>
       </div>
     </div>`;
   document.getElementById('db-news').innerHTML = `
@@ -1515,10 +1528,10 @@ function renderQuests(p) {
   box.innerHTML = `<h3>🎯 Deine Quests <small style="color:var(--muted)">· Lv. ${lv.n} ${lv.name} · ${p.points || 0} P.${next ? ' · noch ' + Math.max(0, next[0] - (p.points || 0)) + ' P. bis Lv. ' + (lv.n + 1) + ' (' + next[1] + ')' : ''}</small></h3>` +
     Q.map(q => {
       const done = q.cur >= q.max;
-      return `<div class="bar-row" style="${done ? 'opacity:.55' : ''}">
-        <span class="lab" style="width:250px">${q.icon} ${escapeHtml(q.label)}${done ? ' ✓' : ''}</span>
+      return `<div class="quest-row" style="${done ? 'opacity:.6' : ''}">
+        <span>${q.icon} ${escapeHtml(q.label)}</span>
         <span class="bar-track"><span class="bar-fill" style="width:${Math.max(3, q.cur / q.max * 100).toFixed(0)}%${done ? ';background:#5bd08a' : ''}"></span></span>
-        <span class="bar-val" style="width:auto;white-space:nowrap">${q.cur}/${q.max} <small style="color:var(--muted)">${q.hint}</small></span></div>`;
+        <span class="quest-val">${done ? '<span style="color:#5bd08a">✓ Erledigt</span>' : `<b>${q.cur}/${q.max}</b>`} <small style="color:var(--muted)">${q.hint}</small></span></div>`;
     }).join('');
 }
 
@@ -1599,6 +1612,25 @@ async function recordOpenSnapshot() {
   try { await fetch('api/collection/snapshot', { method:'POST' }); } catch {}
 }
 window.addEventListener('hashchange', route);
+// Globale Textfarbe (CSS-Variable --text), wird gespeichert und beim Start angewandt
+(function initTextColor() {
+  const KEY = 'ttt-text-color';
+  const saved = localStorage.getItem(KEY);
+  if (saved) document.documentElement.style.setProperty('--text', saved);
+  const inp = document.getElementById('text-color');
+  if (!inp) return;
+  if (saved) inp.value = saved;
+  inp.addEventListener('input', () => {
+    document.documentElement.style.setProperty('--text', inp.value);
+    localStorage.setItem(KEY, inp.value);
+  });
+  document.getElementById('text-color-reset').addEventListener('click', () => {
+    localStorage.removeItem(KEY);
+    document.documentElement.style.removeProperty('--text');
+    inp.value = document.documentElement.getAttribute('data-theme') === 'light' ? '#1b2230' : '#e7eaef';
+    toast('Textfarbe zurückgesetzt');
+  });
+})();
 document.addEventListener('keydown', e => {
   if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '')) {
     e.preventDefault(); location.hash = '#/suche';
