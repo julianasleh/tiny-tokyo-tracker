@@ -3,7 +3,7 @@
 // selbst beantwortet (siehe window.fetch-Override in index.html) -- der Service
 // Worker muss dafuer nichts mehr tun.
 
-const CACHE_VERSION = 'ttt-shell-v7';
+const CACHE_VERSION = 'ttt-shell-v9';
 const APP_SHELL = [
   './',
   './index.html',
@@ -44,7 +44,9 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.includes('/api/')) return;
 
   event.respondWith(
-    fetch(event.request).then((res) => {
+    // 'no-cache': immer kurz beim Server nachfragen (ETag-Abgleich), damit
+    // nach einem Update nie eine veraltete Datei aus dem HTTP-Cache kommt.
+    fetch(event.request, { cache: 'no-cache' }).then((res) => {
       const copy = res.clone();
       caches.open(CACHE_VERSION).then((cache) => cache.put(event.request, copy)).catch(() => {});
       return res;

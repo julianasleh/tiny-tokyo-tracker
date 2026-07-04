@@ -2259,7 +2259,18 @@ async function confirmAdd() {
   closeAddModal();
   await addToCollection(card);
 }
-async function patchCard(id, body) { await fetch('api/collection/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); await loadCollection(); refreshSoldCount(); }
+async function patchCard(id, body) {
+  const r = await fetch('api/collection/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if (!r.ok) {
+    const d = await r.json().catch(()=>({}));
+    const msg = String((d && d.error) || ('HTTP ' + r.status));
+    const hint = /for_sale|asking_price|column|schema/i.test(msg)
+      ? '\n\nVermutlich fehlt noch die Datenbank-Erweiterung: Supabase → SQL Editor → Inhalt von supabase-community.sql ausführen. Danach hier erneut speichern.'
+      : '';
+    alert('Änderung konnte nicht gespeichert werden: ' + msg + hint);
+  }
+  await loadCollection(); refreshSoldCount();
+}
 async function removeCard(id) { await fetch('api/collection/'+id,{method:'DELETE'}); await loadCollection(); }
 async function refreshPrices() {
   const btn = document.getElementById('refresh-btn'); const orig='Preise aktualisieren'; btn.textContent='Aktualisiere…'; btn.disabled=true;
