@@ -7,10 +7,10 @@ window.SHOP_INFO = {
   name: 'Tiny Tokyo',
   slogan: 'Dein Shop für Pokémon, Magic, Yu-Gi-Oh und One Piece.',
   description: 'Einzelkarten, Displays und Zubehör – Ankauf und Tausch nach Absprache.',
-  
 
   address: ['Marktstraße 69', '37115 Duderstadt'],
   phone: '01512 6988867',
+  email: 'julianasleh@gmail.com',
 
   // Öffnungszeiten: [Tag, Zeit] – Reihenfolge frei wählbar
   hours: [

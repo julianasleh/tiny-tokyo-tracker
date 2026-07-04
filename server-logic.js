@@ -364,7 +364,7 @@
   // --- Einstellungen (z. B. PokemonPriceTracker-Key fuers Graded-Modul) --------
   // Allowlist statt beliebiger Keys: verhindert, dass ueber diese generische Route
   // versehentlich andere/zukuenftige Settings ausgelesen werden koennten.
-  const SETTINGS_ALLOWLIST = ['pokepriceApiKey', 'displayName', 'contact', 'country', 'bio'];
+  const SETTINGS_ALLOWLIST = ['pokepriceApiKey', 'displayName', 'contact', 'country', 'bio', 'favGames', 'collectorType'];
   route('GET', '/api/settings/:key', async ({ params }) => {
     if (!SETTINGS_ALLOWLIST.includes(params.key)) return bad(404, { error: 'Unbekannter Einstellungs-Schlüssel' });
     return ok({ value: await D.getSetting(params.key) });

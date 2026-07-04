@@ -417,6 +417,7 @@
       <span><label>Set</label><select id="f-set"><option value="">alle</option></select></span>
       <span><label>Seltenheit</label><select id="f-rarity"><option value="">alle</option></select></span>
       <span id="f-lang-wrap"><label>Sprache</label><select id="f-lang"><option value="">alle</option></select></span>
+      <span><label style="cursor:pointer"><input type="checkbox" id="f-price" style="width:auto;vertical-align:-2px" /> nur mit Preis</label></span>
       <span><label>Sortieren</label>
         <select id="f-sort">
           <option value="relevance">Relevanz</option>
@@ -658,6 +659,17 @@
         <input type="text" id="cm-contact" placeholder="Kontakt (E-Mail, Instagram, …)" style="flex:1;min-width:200px" />
         <button class="ghost" id="cm-profile-save">Speichern</button>
       </div>
+      <div class="row" style="gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap">
+        <span class="set-lbl">Lieblings-TCGs</span>
+        <div class="row" id="cm-favgames" style="gap:6px">
+          <button class="chip" data-g="pokemon" type="button">Pokémon</button>
+          <button class="chip" data-g="magic" type="button">Magic</button>
+          <button class="chip" data-g="yugioh" type="button">Yu-Gi-Oh</button>
+          <button class="chip" data-g="onepiece" type="button">One Piece</button>
+        </div>
+        <span class="set-lbl" style="margin-left:8px">Sammler-Typ</span>
+        <select id="cm-type"><option value="">– kein Label –</option></select>
+      </div>
       <div class="field" style="margin-top:10px"><label>Über mich (öffentlich in deinem Profil sichtbar)</label>
         <textarea id="cm-bio" rows="3" maxlength="500" placeholder="z. B. Sammle seit 1999, Schwerpunkt japanische Pikachus…" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 13px;color:var(--text);font:inherit;resize:vertical"></textarea></div>
       <div class="row" style="gap:8px;margin-top:8px">
@@ -673,6 +685,8 @@
         <button class="ghost" id="fullimport-btn" title="Alle Daten aus einer JSON-Datei wiederherstellen">Wiederherstellen ⤒</button>
         <button class="ghost" id="backup-btn" title="Sicherungskopie der Datenbank anlegen">Sicherung jetzt</button>
         <button class="ghost" id="export-btn">Sammlung als Excel ⤓</button>
+        <button class="ghost" id="csv-btn" title="Für Cardmarket & Co.">Sammlung als CSV ⤓</button>
+        <button class="ghost" id="print-btn" title="Druckansicht – im Druckdialog als PDF speichern">Bestandsliste drucken 🖨</button>
         <button class="ghost" id="import-btn">Excel importieren ⤒</button>
         <input type="file" id="import-file" accept=".xlsx" style="display:none" />
         <input type="file" id="fullimport-file" accept=".json,application/json" style="display:none" />
@@ -968,7 +982,8 @@
     <button class="detail-close" id="pf-close" title="Schließen">✕</button>
     <h3 id="pf-name">Profil</h3>
     <div class="msub" id="pf-meta"></div>
-    <div id="pf-badges" style="margin:4px 0 12px"></div>
+    <div id="pf-badges" style="margin:4px 0 8px"></div>
+    <div id="pf-indicators" class="msub" style="margin:0 0 12px;line-height:1.9"></div>
     <div class="an-grid" id="pf-stats" style="margin-bottom:10px"></div>
     <p id="pf-bio" class="msub" style="white-space:pre-wrap;margin:0 0 8px"></p>
     <div class="msub" id="pf-contact" style="margin-bottom:10px"></div>
@@ -1629,8 +1644,9 @@ function applySearchFilters() {
   const set = document.getElementById('f-set').value;
   const rarity = document.getElementById('f-rarity').value;
   const langF = document.getElementById('f-lang').value;
+  const priceOnly = document.getElementById('f-price').checked;
   const sort = document.getElementById('f-sort').value;
-  let list = lastResults.filter(c => !set || c.setName===set).filter(c => !rarity || c.rarity===rarity).filter(c => !langF || c.lang===langF);
+  let list = lastResults.filter(c => !set || c.setName===set).filter(c => !rarity || c.rarity===rarity).filter(c => !langF || c.lang===langF).filter(c => !priceOnly || c.cardmarketPrice != null);
   const price = c => c.cardmarketPrice ?? -1;
   const numOf = c => parseInt(String(c.number).replace(/\D/g,'')) || 0;
   if (sort==='price-desc') list = [...list].sort((a,b)=>price(b)-price(a));
@@ -1940,6 +1956,21 @@ function renderChart() {
 // ---- Aktionen ----
 async function addToCollection(card) {
   if (card.lang) card.language = card.lang;
+  // Duplikat-Erkennung: gleiche Karte in gleicher Sprache schon im Bestand?
+  try {
+    const { cards } = await (await fetch('api/collection')).json();
+    const existing = (cards || []).find(x => x.game === card.game && x.external_id === card.externalId
+      && String(x.language || '').toLowerCase() === String(card.language || '').toLowerCase() && x.status !== 'sold');
+    if (existing) {
+      const add = Math.max(1, card.quantity || 1);
+      if (confirm(`„${card.name}" (${flagFor(card.language) || card.language}) ist schon ×${existing.quantity} in deiner Sammlung.\n\nOK = Menge um ${add} erhöhen · Abbrechen = trotzdem separat anlegen`)) {
+        await fetch('api/collection/' + existing.id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ quantity: existing.quantity + add }) });
+        await loadCollection();
+        document.getElementById('search-status').textContent = `Menge von „${card.name}" auf ×${existing.quantity + add} erhöht.`;
+        return;
+      }
+    }
+  } catch {}
   await fetch('api/collection',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(card)});
   await loadCollection();
   document.getElementById('search-status').textContent = `„${card.name}" (${flagFor(card.language)||card.language}) zur Sammlung hinzugefügt.`;
@@ -2125,7 +2156,7 @@ function renderCommunity() {
       <div class="ci-main">
         <div class="ci-name">${escapeHtml(c.name)}${c.quantity>1?` ×${c.quantity}`:''}${c.is_mine?'<span class="badge-target">dein Angebot</span>':''}${isWishMatch(c)?'<span class="badge-target">🎯 Wunschliste</span>':''}</div>
         <div class="ci-sub">${GAME_LABEL[c.game]||c.game} · <span class="flag">${flagFor(c.language)}</span>${escapeHtml(c.set_name||'')}${ref?` · <b>${escapeHtml(ref)}</b>`:''} · Zustand ${escapeHtml(c.condition||'–')}</div>
-        <div class="ci-sub">von <span data-act="profile" data-uid="${escapeHtml(c.seller_id||'')}" style="cursor:pointer;border-bottom:1px dotted var(--muted)" title="Profil ansehen">${cflag?cflag+' ':''}<b>${escapeHtml(c.seller_name||'Sammler')}</b>${c.seller_verified?' 🛡️':''}${c.seller_fb_count?` <span style="color:var(--gold)">★ ${Number(c.seller_fb_avg).toFixed(1)}</span> <small>(${c.seller_fb_count} Feedback)</small>`:(c.seller_rating!=null?` <span style="color:var(--gold)">★ ${Number(c.seller_rating).toFixed(1)}</span> <small>(${c.seller_rating_count})</small>`:'')}${c.seller_trades?` · <small title="abgeschlossene Trades">🔄 ${c.seller_trades}</small>`:''}</span></div>
+        <div class="ci-sub">von <span data-act="profile" data-uid="${escapeHtml(c.seller_id||'')}" style="cursor:pointer;border-bottom:1px dotted var(--muted)" title="Profil ansehen">${cflag?cflag+' ':''}<b>${escapeHtml(c.seller_name||'Sammler')}</b>${c.seller_verified?' 🛡️':''}${c.seller_fb_count?` <span style="color:var(--gold)">★ ${Number(c.seller_fb_avg).toFixed(1)}</span> <small>(${c.seller_fb_count} Feedback)</small>`:(c.seller_rating!=null?` <span style="color:var(--gold)">★ ${Number(c.seller_rating).toFixed(1)}</span> <small>(${c.seller_rating_count})</small>`:'')}${c.seller_trades?` · <small title="abgeschlossene Trades">🔄 ${c.seller_trades}</small>`:''}${c.seller_quote!=null&&c.seller_trades>=3?` <small style="color:#5bd08a" title="Erfolgsquote">✔ ${Math.round(c.seller_quote)} %</small>`:''}</span></div>
       </div>
       <div class="ci-spacer"></div>
       <div class="ci-prices"><div class="ci-price" style="cursor:default">${price}</div></div>
@@ -2416,7 +2447,7 @@ async function loadBoard() {
   el.innerHTML = `<div class="an-card"><h3>🏆 Rangliste</h3>` + rows.map((r2,i)=>`
     <div class="top-row" data-act="profile" data-uid="${escapeHtml(r2.user_id||'')}" style="cursor:pointer${r2.is_me?';color:var(--gold)':''}" title="Profil ansehen">
       <span class="rank">${i+1}</span>
-      <span class="nm">${countryFlag(r2.country)?countryFlag(r2.country)+' ':''}${escapeHtml(r2.name||'Sammler')}${r2.is_me?' <small>(du)</small>':''}</span>
+      <span class="nm">${countryFlag(r2.country)?countryFlag(r2.country)+' ':''}${escapeHtml(r2.name||'Sammler')}${r2.is_me?' <small>(du)</small>':''} <small style="color:var(--muted)">Lv. ${levelFor(r2.points).n} ${levelFor(r2.points).name}</small></span>
       <span class="vl">${r2.points} P.</span>
     </div>`).join('') +
     `<p class="msub" style="margin-top:10px">Punkte: 10 je Karte in der Sammlung · 25 je aktives Verkaufsangebot · 50 je verkaufte Karte · 5 je Wunschlisten-Eintrag.</p></div>`;
@@ -2436,12 +2467,22 @@ async function loadCommunityProfile() {
     const k = await (await fetch('api/settings/contact')).json();
     const c = await (await fetch('api/settings/country')).json();
     const b = await (await fetch('api/settings/bio')).json();
+    const fg = await (await fetch('api/settings/favGames')).json();
+    const ct = await (await fetch('api/settings/collectorType')).json();
     if (n && n.value != null) document.getElementById('cm-name').value = n.value;
     if (k && k.value != null) document.getElementById('cm-contact').value = k.value;
     if (c && c.value != null) document.getElementById('cm-country').value = c.value;
     if (b && b.value != null) document.getElementById('cm-bio').value = b.value;
+    const tsel = document.getElementById('cm-type');
+    if (tsel.options.length <= 1) tsel.innerHTML = '<option value="">– kein Label –</option>' + COLLECTOR_TYPES.map(t => `<option>${t}</option>`).join('');
+    if (ct && ct.value != null) tsel.value = ct.value;
+    const favs = new Set(((fg && fg.value) || '').split(',').map(x => x.trim()).filter(Boolean));
+    document.querySelectorAll('#cm-favgames .chip').forEach(ch => ch.classList.toggle('active', favs.has(ch.dataset.g)));
   } catch {}
 }
+document.getElementById('cm-favgames').addEventListener('click', e => {
+  const ch = e.target.closest('.chip'); if (ch) ch.classList.toggle('active');
+});
 document.getElementById('cm-profile-save').addEventListener('click', async ()=>{
   const st = document.getElementById('cm-profile-status');
   st.textContent = 'Speichere…';
@@ -2451,7 +2492,10 @@ document.getElementById('cm-profile-save').addEventListener('click', async ()=>{
     const r2 = await post('contact', document.getElementById('cm-contact').value.trim());
     const r3 = await post('country', document.getElementById('cm-country').value);
     const r4 = await post('bio', document.getElementById('cm-bio').value.trim());
-    st.textContent = (r1.ok && r2.ok && r3.ok && r4.ok) ? 'Gespeichert ✓' : 'Fehler beim Speichern – sind die SQL-Skripte schon ausgeführt?';
+    const favs = [...document.querySelectorAll('#cm-favgames .chip.active')].map(ch => ch.dataset.g).join(',');
+    const r5 = await post('favGames', favs);
+    const r6 = await post('collectorType', document.getElementById('cm-type').value);
+    st.textContent = (r1.ok && r2.ok && r3.ok && r4.ok && r5.ok && r6.ok) ? 'Gespeichert ✓' : 'Fehler beim Speichern – sind die SQL-Skripte schon ausgeführt?';
   } catch { st.textContent = 'Fehler beim Speichern.'; }
   setTimeout(()=>{ st.textContent=''; }, 3500);
 });
@@ -2465,16 +2509,45 @@ const BADGE_DEFS = {
   top: ['🏆', 'Top-Sammler · 1000+ Punkte'],
   aktiv: ['🛒', 'Aktiver Verkäufer · 5+ Angebote'],
   urgestein: ['📅', 'Über 1 Jahr dabei'],
+  t10: ['🥉', '10+ Trades'], t50: ['🥈', '50+ Trades'], t100: ['🥇', '100+ Trades'],
+  t500: ['💎', '500+ Trades'], t1000: ['👑', '1000+ Trades'],
 };
+// Level nach Handelsaktivitaet (Punkte)
+const LEVELS = [[0,'Anfänger'],[250,'Sammler'],[750,'Händler'],[1500,'Veteran'],[3000,'Experte'],[6000,'Meister'],[12000,'Legende']];
+function levelFor(points) {
+  let idx = 0;
+  LEVELS.forEach((l, i) => { if ((points || 0) >= l[0]) idx = i; });
+  return { n: idx + 1, name: LEVELS[idx][1] };
+}
+const COLLECTOR_TYPES = ['Casual','Sammler','Competitive','Investor','Händler','Tauscher'];
 // Abzeichen = manuell vergebene (aus der Datenbank, z. B. "verified")
 // + automatisch verdiente (aus den Statistiken berechnet).
 function profileBadges(p) {
   const out = [...(p.badges || [])];
+  const td = p.trades_done || 0;
+  if (td >= 1000) out.push('t1000'); else if (td >= 500) out.push('t500');
+  else if (td >= 100) out.push('t100'); else if (td >= 50) out.push('t50');
+  else if (td >= 10) out.push('t10');
   if ((p.sold_count || 0) >= 10) out.push('haendler');
   if ((p.points || 0) >= 1000) out.push('top');
   if ((p.active_offers || 0) >= 5) out.push('aktiv');
   if (p.member_since && (Date.now() - new Date(p.member_since).getTime()) > 365 * 24 * 3600 * 1000) out.push('urgestein');
   return [...new Set(out)].filter(b => BADGE_DEFS[b]);
+}
+// Erfolge (Achievements) -- live aus den Profil-Zahlen berechnet
+function profileAchievements(p) {
+  const a = [];
+  const td = p.trades_done || 0;
+  if (td >= 1) a.push('🤝 Erster erfolgreicher Trade');
+  if ((p.fb_count || 0) >= 10) a.push('⭐ 10+ Bewertungen erhalten');
+  if ((p.total_qty || 0) >= 100) a.push('📚 100 Karten in der Sammlung');
+  if ((p.total_qty || 0) >= 1000) a.push('🏛️ 1000 Karten in der Sammlung');
+  if ((p.sold_count || 0) >= 1) a.push('📦 Erster Verkauf');
+  if (p.max_trade_price != null && p.max_trade_price >= 500) a.push('💰 Trade über 500 €');
+  if ((p.traded_countries || 0) >= 3) a.push('🌍 Mit 3+ Ländern gehandelt');
+  if ((p.traded_countries || 0) >= 10) a.push('🗺️ Mit 10+ Ländern gehandelt');
+  if (p.fb_recommend_pct != null && p.fb_recommend_pct >= 100 && (p.fb_count || 0) >= 10) a.push('💯 100 % Weiterempfehlung (10+ Feedbacks)');
+  return a;
 }
 function renderStarRow(n) { let s = ''; for (let i = 1; i <= 5; i++) s += i <= n ? '★' : '☆'; return s; }
 
@@ -2496,10 +2569,24 @@ async function openProfile(userId) {
   const flag = countryFlag(p.country);
   document.getElementById('pf-name').textContent = `${flag ? flag + ' ' : ''}${p.name || 'Sammler'}`;
   const meta = [];
+  const lv = levelFor(p.points);
+  meta.push(`Lv. ${lv.n} · ${lv.name}`);
   if (p.fb_count) meta.push(`★ ${Number(p.fb_avg).toFixed(2)} · ${p.fb_count} Feedback`);
   else meta.push('Noch kein Trade-Feedback');
+  if (p.collector_type) meta.push(p.collector_type);
+  if (p.fav_games) meta.push((p.fav_games.split(',').map(g => GAME_LABEL[g.trim()] || g.trim()).join(', ')));
   if (p.member_since) meta.push('Dabei seit ' + new Date(p.member_since).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }));
   document.getElementById('pf-meta').textContent = meta.join('  ·  ');
+  // Vertrauensindikatoren (nur zeigen, was wirklich zutrifft)
+  const ind = [];
+  if (p.email_verified) ind.push('🟢 E-Mail-Adresse bestätigt');
+  if (p.last_active && (Date.now() - new Date(p.last_active).getTime()) < 7 * 24 * 3600 * 1000) ind.push('🟢 Aktiv diese Woche');
+  if (p.response_hours != null) ind.push('🟢 Antwortet im Schnitt ' + (p.response_hours < 1 ? 'in unter 1 Stunde' : p.response_hours < 48 ? `in ~${Math.round(p.response_hours)} Std.` : `in ~${Math.round(p.response_hours / 24)} Tagen`));
+  {
+    const td2 = p.trades_done || 0, tc2 = p.trades_cancelled || 0;
+    if (td2 >= 3 && Math.round(td2 / (td2 + tc2) * 100) >= 90) ind.push(`🟢 ${Math.round(td2 / (td2 + tc2) * 100)} % erfolgreiche Trades`);
+  }
+  document.getElementById('pf-indicators').innerHTML = ind.map(escapeHtml).join('<br>');
   document.getElementById('pf-badges').innerHTML = profileBadges(p)
     .map(b => `<span class="gchip" style="cursor:default" title="${escapeHtml(BADGE_DEFS[b][1])}">${BADGE_DEFS[b][0]} ${escapeHtml(BADGE_DEFS[b][1])}</span>`).join('')
     || '<span class="msub">Noch keine Abzeichen.</span>';
@@ -2514,9 +2601,12 @@ async function openProfile(userId) {
   document.getElementById('pf-bio').textContent = p.bio || '';
   document.getElementById('pf-contact').innerHTML = p.contact ? ('Kontakt: <b>' + escapeHtml(p.contact) + '</b>') : '<span class="msub">Keine Kontaktinfo hinterlegt.</span>';
   document.getElementById('pf-msg').style.display = p.is_me ? 'none' : '';
+  // Erfolge
+  const ach = profileAchievements(p);
+  var achHtml = ach.length ? `<div class="an-card" style="margin:0 0 12px"><h3>🏅 Erfolge</h3>${ach.map(a => `<span class="gchip" style="cursor:default">${escapeHtml(a)}</span>`).join('')}</div>` : '';
   // Feedback-Uebersicht (Cardmarket-Stil)
   const catRow = (label, v) => v ? `<div class="bar-row"><span class="lab">${label}</span><span style="color:var(--gold)">${renderStarRow(Math.round(v))}</span> <small style="color:var(--muted)">${Number(v).toFixed(1)}</small></div>` : '';
-  document.getElementById('pf-fb-summary').innerHTML = p.fb_count ? `
+  document.getElementById('pf-fb-summary').innerHTML = achHtml + (p.fb_count ? `
     <div class="an-card" style="margin:0 0 12px"><h3>Trade-Feedback</h3>
       <div class="row" style="gap:16px;flex-wrap:wrap;margin-bottom:8px">
         <span style="color:#5bd08a">Positiv <b>${p.fb_pos || 0}</b></span>
@@ -2525,7 +2615,7 @@ async function openProfile(userId) {
         ${p.fb_recommend_pct != null ? `<span>👍 <b>${Math.round(p.fb_recommend_pct)} %</b> würden wieder tauschen</span>` : ''}
       </div>
       ${catRow('Kommunikation', p.fb_kommunikation)}${catRow('Verpackung', p.fb_verpackung)}${catRow('Versand', p.fb_versand)}${catRow('Kartenzustand', p.fb_zustand)}
-    </div>` : '<p class="msub">Noch kein Trade-Feedback. Feedback gibt es erst nach einem abgeschlossenen Trade – so bleibt es fälschungssicher.</p>';
+    </div>` : '<p class="msub">Noch kein Trade-Feedback. Feedback gibt es erst nach einem abgeschlossenen Trade – so bleibt es fälschungssicher.</p>');
   // Einzelne Feedbacks
   document.getElementById('pf-ratings').innerHTML = fb.length
     ? '<div class="an-card" style="margin:0"><h3>Letzte Bewertungen</h3>' + fb.map(f => `
@@ -2986,6 +3076,7 @@ document.addEventListener('click', e=>{ if(!e.target.closest('.ac-wrap')) hideAu
 document.getElementById('f-set').addEventListener('change', applySearchFilters);
 document.getElementById('f-rarity').addEventListener('change', applySearchFilters);
 document.getElementById('f-lang').addEventListener('change', applySearchFilters);
+document.getElementById('f-price').addEventListener('change', applySearchFilters);
 document.getElementById('f-sort').addEventListener('change', applySearchFilters);
 document.getElementById('view-toggle').addEventListener('click', e=>{
   const b = e.target.closest('.chip'); if(!b) return;
@@ -2995,6 +3086,36 @@ document.getElementById('view-toggle').addEventListener('click', e=>{
 });
 document.getElementById('refresh-btn').addEventListener('click', refreshPrices);
 document.getElementById('export-btn').addEventListener('click', exportExcel);
+document.getElementById('csv-btn').addEventListener('click', async ()=>{
+  const { cards } = await (await fetch('api/collection')).json();
+  const cols = ['Spiel','Name','Set','Set-Code','Nummer','Seltenheit','Anzahl','Zustand','Sprache','Preis','Währung','Kaufpreis','Kaufdatum','Status','Verkaufspreis','Verkaufsdatum','ExterneID'];
+  const esc = (v) => { v = v == null ? '' : String(v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const rows = (cards || []).map(c => [c.game, c.name, c.set_name, c.set_code, c.number, c.rarity, c.quantity, c.condition, c.language,
+    (c.price_current ?? c.price_at_add) ?? '', c.currency || 'EUR', c.purchase_price ?? '', c.purchase_date ?? '',
+    c.status || 'owned', c.sold_price ?? '', c.sold_date ?? '', c.external_id]);
+  const csv = '\ufeff' + [cols, ...rows].map(r => r.map(esc).join(';')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = 'tcg-sammlung.csv'; a.click(); URL.revokeObjectURL(a.href);
+});
+document.getElementById('print-btn').addEventListener('click', async ()=>{
+  const { cards } = await (await fetch('api/collection')).json();
+  const owned = (cards || []).filter(c => c.status !== 'sold');
+  const val = (c) => ((c.price_current ?? c.price_at_add) ?? 0) * c.quantity;
+  const sumEur = owned.filter(c => (c.currency || 'EUR') !== 'USD').reduce((s, c) => s + val(c), 0);
+  const sumUsd = owned.filter(c => (c.currency || 'EUR') === 'USD').reduce((s, c) => s + val(c), 0);
+  const e2 = (v) => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const rows = owned.map(c => `<tr><td>${e2(GAME_LABEL[c.game]||c.game)}</td><td>${e2(c.name)}</td><td>${e2(c.set_name||'')}</td><td>${e2(refText({setCode:c.set_code,number:c.number}))}</td><td>${e2((c.language||'').toUpperCase())}</td><td>${e2(c.condition||'')}</td><td style="text-align:right">${c.quantity}</td><td style="text-align:right">${c.purchase_price!=null?fmt(c.purchase_price,c.currency||'EUR'):''}</td><td style="text-align:right">${(c.price_current??c.price_at_add)!=null?fmt(c.price_current??c.price_at_add,c.currency||'EUR'):''}</td></tr>`).join('');
+  const w = window.open('', '_blank');
+  if (!w) { alert('Bitte Pop-ups für diese Seite erlauben.'); return; }
+  w.document.write(`<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><title>Bestandsliste</title>
+    <style>body{font-family:system-ui,sans-serif;font-size:12px;margin:24px}h1{font-size:18px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ccc;padding:4px 6px;text-align:left;font-size:11px}th{background:#f0f0f0}@media print{button{display:none}}</style></head>
+    <body><h1>⛩ Tiny Tokyo Tracker – Bestandsliste</h1>
+    <p>Stand: ${new Date().toLocaleString('de-DE')} · ${owned.length} Positionen · Gesamtwert: ${fmt(sumEur,'EUR')}${sumUsd>0?' + '+fmt(sumUsd,'USD'):''}</p>
+    <button onclick="window.print()">Drucken / als PDF speichern</button>
+    <table><thead><tr><th>Spiel</th><th>Name</th><th>Set</th><th>Nr.</th><th>Spr.</th><th>Zustand</th><th>Menge</th><th>EK</th><th>Wert</th></tr></thead><tbody>${rows}</tbody></table></body></html>`);
+  w.document.close();
+});
 document.getElementById('import-btn').addEventListener('click', ()=>document.getElementById('import-file').click());
 document.getElementById('import-file').addEventListener('change', e=>{ if(e.target.files[0]) importExcel(e.target.files[0]); e.target.value=''; });
 document.getElementById('backup-btn').addEventListener('click', async e=>{

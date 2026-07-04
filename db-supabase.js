@@ -483,7 +483,7 @@
   }
 
   // --- Einstellungen --------------------------------------------------------
-  const SETTINGS_COLS = { pokepriceApiKey: 'pokeprice_api_key', displayName: 'display_name', contact: 'contact', country: 'country', bio: 'bio' };
+  const SETTINGS_COLS = { pokepriceApiKey: 'pokeprice_api_key', displayName: 'display_name', contact: 'contact', country: 'country', bio: 'bio', favGames: 'fav_games', collectorType: 'collector_type' };
   async function getSetting(key) {
     const col = SETTINGS_COLS[key];
     if (!col) return null;

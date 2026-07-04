@@ -10,4 +10,4 @@ window.SUPABASE_ANON_KEY = 'sb_publishable_XtL4aBMxgkXwkIMif8UIuw_CSoWup6w';
 // dem zugehoerigen SECRET Key aktiviert wurde. Solange dieser Wert leer ist,
 // wird kein Turnstile geladen (und es darf in Supabase auch nicht aktiviert
 // sein, sonst schlagen Anmeldungen fehl!).
-window.TURNSTILE_SITE_KEY = '0x4AAAAAADvieMRGJTY8O1qN';
+window.TURNSTILE_SITE_KEY = '';
