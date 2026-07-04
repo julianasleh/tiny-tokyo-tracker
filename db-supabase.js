@@ -48,6 +48,14 @@
     await getClient().auth.signOut();
     currentUserId = null;
   }
+  async function resetPassword(email) {
+    const { error } = await getClient().auth.resetPasswordForEmail(email);
+    if (error) throw new Error(error.message);
+  }
+  async function updatePassword(password) {
+    const { error } = await getClient().auth.updateUser({ password });
+    if (error) throw new Error(error.message);
+  }
   async function getSession() {
     const { data } = await getClient().auth.getSession();
     return data.session || null;
@@ -93,7 +101,7 @@
 
   async function updateCard(id, fields) {
     const allowed = ['quantity', 'condition', 'language', 'notes', 'price_current', 'price_low', 'price_trend',
-      'currency', 'purchase_price', 'purchase_date', 'status', 'sold_price', 'sold_date'];
+      'currency', 'purchase_price', 'purchase_date', 'status', 'sold_price', 'sold_date', 'for_sale', 'asking_price'];
     const patch = {};
     for (const k of allowed) if (fields[k] !== undefined) patch[k] = fields[k];
     if (!Object.keys(patch).length) {
@@ -475,22 +483,30 @@
   }
 
   // --- Einstellungen --------------------------------------------------------
+  const SETTINGS_COLS = { pokepriceApiKey: 'pokeprice_api_key', displayName: 'display_name', contact: 'contact' };
   async function getSetting(key) {
-    if (key !== 'pokepriceApiKey') return null;
+    const col = SETTINGS_COLS[key];
+    if (!col) return null;
     const uid = await requireUserId();
-    const { data } = await getClient().from('user_settings').select('pokeprice_api_key').eq('user_id', uid).maybeSingle();
-    return data ? data.pokeprice_api_key : null;
+    const { data } = await getClient().from('user_settings').select(col).eq('user_id', uid).maybeSingle();
+    return data ? data[col] : null;
   }
   async function setSetting(key, value) {
-    if (key !== 'pokepriceApiKey') return;
+    const col = SETTINGS_COLS[key];
+    if (!col) return;
     const uid = await requireUserId();
-    const { error } = await getClient().from('user_settings').upsert({ user_id: uid, pokeprice_api_key: value }, { onConflict: 'user_id' });
+    const { error } = await getClient().from('user_settings').upsert({ user_id: uid, [col]: value }, { onConflict: 'user_id' });
     if (error) throw new Error(error.message);
   }
 
+  // --- Community-Marktplatz (oeffentliche Sicht market_cards) ---------------
+  async function listMarket() {
+    return must(await getClient().from('market_cards').select('*').order('game', { ascending: true }));
+  }
+
   window.DB = {
-    init, signUp, signIn, signOut, getSession, onAuthChange,
-    getSetting, setSetting,
+    init, signUp, signIn, signOut, getSession, onAuthChange, resetPassword, updatePassword,
+    getSetting, setSetting, listMarket,
     listCards, addCard, updateCard, deleteCard, allForRefresh,
     listSold, soldForRefresh, soldTotals,
     computeTotals, recordSnapshot, getHistory, getCardHistory,

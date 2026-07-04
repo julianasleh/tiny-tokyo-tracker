@@ -364,7 +364,7 @@
   // --- Einstellungen (z. B. PokemonPriceTracker-Key fuers Graded-Modul) --------
   // Allowlist statt beliebiger Keys: verhindert, dass ueber diese generische Route
   // versehentlich andere/zukuenftige Settings ausgelesen werden koennten.
-  const SETTINGS_ALLOWLIST = ['pokepriceApiKey'];
+  const SETTINGS_ALLOWLIST = ['pokepriceApiKey', 'displayName', 'contact'];
   route('GET', '/api/settings/:key', async ({ params }) => {
     if (!SETTINGS_ALLOWLIST.includes(params.key)) return bad(404, { error: 'Unbekannter Einstellungs-Schlüssel' });
     return ok({ value: await D.getSetting(params.key) });
@@ -373,6 +373,15 @@
     if (!SETTINGS_ALLOWLIST.includes(params.key)) return bad(404, { error: 'Unbekannter Einstellungs-Schlüssel' });
     await D.setSetting(params.key, (body && body.value) != null ? body.value : null);
     return ok({ ok: true });
+  });
+
+  // --- Community-Marktplatz ---------------------------------------------------
+  route('GET', '/api/market', async () => {
+    try { return ok({ items: await D.listMarket() }); }
+    catch (e) {
+      // Sicht existiert noch nicht -> verstaendliche Meldung statt 500
+      return bad(503, { error: 'Community noch nicht eingerichtet. Bitte supabase-community.sql im Supabase-SQL-Editor ausführen.', detail: String((e && e.message) || e) });
+    }
   });
 
   // --- Dispatcher -------------------------------------------------------------

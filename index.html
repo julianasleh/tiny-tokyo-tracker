@@ -325,6 +325,7 @@
         <button type="button" id="auth-signup-btn" class="ghost" style="flex:1">Neu registrieren</button>
       </div>
       <p class="hint" id="auth-status" style="min-height:1.2em;margin-top:10px"></p>
+      <p class="hint" style="text-align:center;margin:4px 0 0"><a href="#" id="auth-forgot">Passwort vergessen?</a></p>
     </form>
   </div>
 </div>
@@ -346,6 +347,7 @@
       <a href="#/verkauft" data-view="verkauft">Verkauft <span class="count" id="sold-count"></span></a>
       <a href="#/analyse" data-view="analyse">Analyse</a>
       <a href="#/graded" data-view="graded">Graded</a>
+      <a href="#/community" data-view="community">Community</a>
       <a href="#/einstellungen" data-view="einstellungen">Einstellungen</a>
       <a href="#" id="logout-link" title="Abmelden">Abmelden</a>
     </nav>
@@ -561,6 +563,30 @@
     <div id="sold-list"></div>
   </section>
 
+  <!-- ============ COMMUNITY (Marktplatz) ============ -->
+  <section class="view" id="view-community">
+    <div class="hero">
+      <div>
+        <div class="label">Community · Karten zum Verkauf</div>
+        <div class="value" id="cm-count">0</div>
+        <div class="breakdown">Angebote aller Nutzer. Deine Karten bietest du in der Sammlung über ✎ an – Anzeigename &amp; Kontakt stellst du in den Einstellungen ein.</div>
+      </div>
+      <div class="actions"><button class="ghost" id="cm-reload">Neu laden</button></div>
+    </div>
+    <div class="filterbar row">
+      <div class="row" id="cm-chips">
+        <button class="chip active" data-game="">Alle</button>
+        <button class="chip" data-game="pokemon">Pokémon</button>
+        <button class="chip" data-game="magic">Magic</button>
+        <button class="chip" data-game="yugioh">Yu-Gi-Oh</button>
+        <button class="chip" data-game="onepiece">One Piece</button>
+      </div>
+      <span class="ci-spacer"></span>
+      <input type="text" id="cm-search" placeholder="Angebote durchsuchen…" style="max-width:220px" />
+    </div>
+    <div id="community-list"></div>
+  </section>
+
   <!-- ============ INFO ============ -->
   <section class="view" id="view-einstellungen">
     <div class="info-card">
@@ -644,6 +670,17 @@
          <b>Grade</b> stehen im Graded-Reiter bereit. Hinweis: Die automatischen
          Graded-Preise sind eBay-Werte in <b>US-Dollar</b>; ein kostenloser Gratis-Tier für
          Cardmarket-Graded-Preise in Euro existiert derzeit nicht.</p>
+    </div>
+
+    <div class="info-card">
+      <h3>Community-Profil</h3>
+      <p class="msub" style="margin-top:0">Wird nur bei deinen Verkaufsangeboten im Community-Reiter angezeigt. Ohne Anzeigename erscheinst du als „Sammler", ohne Kontakt können dich Interessenten nicht erreichen.</p>
+      <div class="row" style="gap:8px">
+        <input type="text" id="cm-name" placeholder="Anzeigename, z. B. Tiny Tokyo" style="flex:1;min-width:160px" />
+        <input type="text" id="cm-contact" placeholder="Kontakt (E-Mail, Instagram, …)" style="flex:1;min-width:200px" />
+        <button class="ghost" id="cm-profile-save">Speichern</button>
+      </div>
+      <p class="msub" id="cm-profile-status" style="margin:8px 0 0;min-height:1.2em"></p>
     </div>
 
     <div class="info-card">
@@ -840,6 +877,14 @@
       <div class="field"><label>Verkaufspreis je Stück</label><input type="text" id="em-soldprice" placeholder="z. B. 20,00" /></div>
       <div class="field"><label>Verkaufsdatum</label><input type="date" id="em-solddate" /></div>
     </div>
+    <div class="field" style="margin-top:4px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="em-sale" style="width:auto" /> Zum Verkauf anbieten (im Community-Reiter für alle sichtbar)
+      </label>
+    </div>
+    <div class="mrow" id="em-sale-fields" style="display:none">
+      <div class="field"><label>Wunschpreis je Stück (optional)</label><input type="text" id="em-saleprice" placeholder="z. B. 15,00" /></div>
+    </div>
     <div class="mactions">
       <button class="ghost" id="em-cancel">Abbrechen</button>
       <button id="em-save">Speichern</button>
@@ -997,6 +1042,22 @@ const authSignupBtnEl = document.getElementById('auth-signup-btn');
 const authLoginBtnEl = document.getElementById('auth-login-btn');
 
 let appStarted = false;
+let recoveryMode = false;
+// Nutzer kommt ueber den Link aus der "Passwort zuruecksetzen"-Mail:
+// Anmeldemaske in den "neues Passwort setzen"-Modus schalten.
+function enterRecoveryMode() {
+  recoveryMode = true;
+  authScreenEl.style.display = '';
+  appWrapEl.style.display = 'none';
+  const emailLabel = authEmailEl.closest('label');
+  if (emailLabel) emailLabel.style.display = 'none';
+  authEmailEl.required = false;
+  authSignupBtnEl.style.display = 'none';
+  authLoginBtnEl.textContent = 'Neues Passwort speichern';
+  authPasswordEl.value = '';
+  authPasswordEl.setAttribute('autocomplete', 'new-password');
+  authStatusEl.textContent = 'Neues Passwort eingeben (mind. 6 Zeichen).';
+}
 async function startAppAfterAuth() {
   authScreenEl.style.display = 'none';
   appWrapEl.style.display = '';
@@ -1050,10 +1111,29 @@ function showAuth(msg) {
 
 document.getElementById('auth-form').addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (recoveryMode) {
+    authStatusEl.textContent = 'Speichere…'; authLoginBtnEl.disabled = true;
+    try {
+      await self.DB.updatePassword(authPasswordEl.value);
+      recoveryMode = false;
+      authStatusEl.textContent = 'Passwort geändert ✓';
+      await startAppAfterAuth();
+    } catch (err) { authStatusEl.textContent = err.message || 'Konnte Passwort nicht ändern.'; }
+    finally { authLoginBtnEl.disabled = false; }
+    return;
+  }
   authStatusEl.textContent = 'Anmelden…'; authLoginBtnEl.disabled = true; authSignupBtnEl.disabled = true;
   try { await self.DB.signIn(authEmailEl.value.trim(), authPasswordEl.value); await startAppAfterAuth(); }
   catch (err) { authStatusEl.textContent = err.message || 'Anmeldung fehlgeschlagen.'; }
   finally { authLoginBtnEl.disabled = false; authSignupBtnEl.disabled = false; }
+});
+document.getElementById('auth-forgot').addEventListener('click', async (e) => {
+  e.preventDefault();
+  const email = authEmailEl.value.trim();
+  if (!email) { authStatusEl.textContent = 'Bitte erst oben deine E-Mail-Adresse eintragen, dann den Link klicken.'; return; }
+  authStatusEl.textContent = 'Sende E-Mail…';
+  try { await self.DB.resetPassword(email); authStatusEl.textContent = 'E-Mail zum Zurücksetzen ist unterwegs – auch im Spam-Ordner nachsehen.'; }
+  catch (err) { authStatusEl.textContent = err.message || 'Konnte die E-Mail nicht senden.'; }
 });
 authSignupBtnEl.addEventListener('click', async () => {
   authStatusEl.textContent = 'Registriere…'; authLoginBtnEl.disabled = true; authSignupBtnEl.disabled = true;
@@ -1068,6 +1148,7 @@ authSignupBtnEl.addEventListener('click', async () => {
 (async function initAuth() {
   try {
     await self.DB.init();
+    self.DB.onAuthChange((event) => { if (event === 'PASSWORD_RECOVERY') enterRecoveryMode(); });
     const session = await self.DB.getSession();
     if (session) await startAppAfterAuth(); else showAuth();
   } catch (e) { showAuth('Verbindung zur Datenbank fehlgeschlagen: ' + (e && e.message || e)); }
@@ -1118,7 +1199,7 @@ function buildLangOptions() {
 // ---- Routing ----
 function route() {
   const view = (location.hash.replace('#/','') || 'suche');
-  const target = ['sammlung','wunschliste','versiegelt','verkauft','analyse','einstellungen','graded'].includes(view) ? view : 'suche';
+  const target = ['sammlung','wunschliste','versiegelt','verkauft','analyse','einstellungen','graded','community'].includes(view) ? view : 'suche';
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + target).classList.add('active');
   document.querySelectorAll('nav a').forEach(a => a.classList.toggle('active', a.dataset.view===target));
@@ -1128,6 +1209,8 @@ function route() {
   if (target==='verkauft') loadSold();
   if (target==='analyse') { recordOpenSnapshot().then(loadAnalyse); }
   if (target==='graded') loadGraded();
+  if (target==='community') loadCommunity();
+  if (target==='einstellungen') loadCommunityProfile();
 }
 // Bei jedem Öffnen der Sammlung einen aktuellen Verlaufspunkt für heute festlegen.
 async function recordOpenSnapshot() {
@@ -1467,7 +1550,7 @@ function renderCollectionItem(c) {
     <div class="collection-item" data-id="${c.id}" style="${sold?'opacity:.72':''}">
       ${c.image_url ? `<img src="${c.image_url}" alt="" data-act="detail" title="Details ansehen" />` : ''}
       <div class="ci-main">
-        <div class="ci-name">${escapeHtml(c.name)}${sold?'<span class="badge-sold">verkauft</span>':''}</div>
+        <div class="ci-name">${escapeHtml(c.name)}${sold?'<span class="badge-sold">verkauft</span>':''}${(!sold && c.for_sale)?'<span class="badge-target">Zum Verkauf</span>':''}</div>
         <div class="ci-sub">${GAME_LABEL[c.game]} · <span class="flag">${flagFor(c.language)}</span><span class="long">${escapeHtml(c.set_name||'')} · </span>${ref?`<b>${escapeHtml(ref)}</b> · `:''}${escapeHtml(c.condition)}${buyInfo}${c.cardmarket_url?` · <a href="${c.cardmarket_url}" target="_blank" rel="noopener" class="cm-link">Cardmarket ↗</a>`:''}</div>
       </div>
       <div class="ci-spacer"></div>
@@ -1726,6 +1809,79 @@ document.getElementById('wish-refresh').addEventListener('click', async e=>{
     if (d.errors && d.errors.length) { b.textContent = `${d.updated}/${d.total} aktualisiert (${d.errors.length} Fehler)`; setTimeout(()=>{ b.textContent=t; }, 2600); return; }
     if (hits) { b.textContent = `🎯 ${hits}× Zielpreis erreicht`; setTimeout(()=>{ b.textContent=t; }, 2600); return; }
   } finally { b.disabled=false; if (b.textContent==='Aktualisiere…') b.textContent=t; }
+});
+
+// ---- Community (Marktplatz) ----
+let marketItems = [];
+let cmGame = '';
+async function loadCommunity() {
+  const el = document.getElementById('community-list');
+  el.innerHTML = '<div class="empty">Lade Angebote…</div>';
+  try {
+    const r = await fetch('api/market');
+    const d = await r.json();
+    if (!r.ok) { el.innerHTML = `<div class="empty">${escapeHtml(d.error || 'Fehler beim Laden.')}</div>`; marketItems = []; document.getElementById('cm-count').textContent = '0'; return; }
+    marketItems = d.items || [];
+  } catch { marketItems = []; }
+  renderCommunity();
+}
+function renderCommunity() {
+  const term = document.getElementById('cm-search').value.trim().toLowerCase();
+  const list = marketItems
+    .filter(c => !cmGame || c.game === cmGame)
+    .filter(c => !term || [c.name, c.set_name, c.seller_name].filter(Boolean).join(' ').toLowerCase().includes(term));
+  document.getElementById('cm-count').textContent = list.length;
+  const el = document.getElementById('community-list');
+  if (!list.length) {
+    el.innerHTML = '<div class="empty">Keine Angebote gefunden. Eigene Karten anbieten: Sammlung → ✎ → „Zum Verkauf anbieten".</div>';
+    return;
+  }
+  el.innerHTML = list.map(c => {
+    const cur = c.currency || 'EUR';
+    const price = c.asking_price != null ? fmt(c.asking_price, cur)
+      : (c.price_current != null ? `${fmt(c.price_current, cur)} <small style="color:var(--muted)">Marktwert</small>` : 'Preis auf Anfrage');
+    const ref = refText({ setCode: c.set_code, number: c.number });
+    return `
+    <div class="collection-item">
+      ${c.image_url ? `<img src="${c.image_url}" alt="" loading="lazy" />` : ''}
+      <div class="ci-main">
+        <div class="ci-name">${escapeHtml(c.name)}${c.quantity>1?` ×${c.quantity}`:''}${c.is_mine?'<span class="badge-target">dein Angebot</span>':''}</div>
+        <div class="ci-sub">${GAME_LABEL[c.game]||c.game} · <span class="flag">${flagFor(c.language)}</span>${escapeHtml(c.set_name||'')}${ref?` · <b>${escapeHtml(ref)}</b>`:''} · Zustand ${escapeHtml(c.condition||'–')}</div>
+        <div class="ci-sub">Verkäufer: <b>${escapeHtml(c.seller_name||'Sammler')}</b>${c.seller_contact?` · Kontakt: <b>${escapeHtml(c.seller_contact)}</b>`:''}</div>
+      </div>
+      <div class="ci-spacer"></div>
+      <div class="ci-prices"><div class="ci-price" style="cursor:default">${price}</div></div>
+    </div>`;
+  }).join('');
+}
+document.getElementById('cm-chips').addEventListener('click', e=>{
+  const chip = e.target.closest('.chip'); if(!chip) return;
+  cmGame = chip.dataset.game;
+  document.querySelectorAll('#cm-chips .chip').forEach(c=>c.classList.toggle('active', c===chip));
+  renderCommunity();
+});
+document.getElementById('cm-search').addEventListener('input', renderCommunity);
+document.getElementById('cm-reload').addEventListener('click', loadCommunity);
+
+// ---- Community-Profil (Einstellungen) ----
+async function loadCommunityProfile() {
+  try {
+    const n = await (await fetch('api/settings/displayName')).json();
+    const k = await (await fetch('api/settings/contact')).json();
+    if (n && n.value != null) document.getElementById('cm-name').value = n.value;
+    if (k && k.value != null) document.getElementById('cm-contact').value = k.value;
+  } catch {}
+}
+document.getElementById('cm-profile-save').addEventListener('click', async ()=>{
+  const st = document.getElementById('cm-profile-status');
+  st.textContent = 'Speichere…';
+  const post = (key, val) => fetch('api/settings/'+key, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ value: val || null }) });
+  try {
+    const r1 = await post('displayName', document.getElementById('cm-name').value.trim());
+    const r2 = await post('contact', document.getElementById('cm-contact').value.trim());
+    st.textContent = (r1.ok && r2.ok) ? 'Gespeichert ✓' : 'Fehler beim Speichern – ist supabase-community.sql schon ausgeführt?';
+  } catch { st.textContent = 'Fehler beim Speichern.'; }
+  setTimeout(()=>{ st.textContent=''; }, 3500);
 });
 
 // ---- Karten-Detailansicht ----
@@ -2245,6 +2401,10 @@ function openEditModal(c) {
   document.getElementById('em-soldprice').value = c.sold_price != null ? String(c.sold_price).replace('.', ',') : '';
   document.getElementById('em-solddate').value = c.sold_date || '';
   document.getElementById('em-sold-fields').style.display = soldChk.checked ? '' : 'none';
+  const saleChk = document.getElementById('em-sale');
+  saleChk.checked = !!c.for_sale && c.status !== 'sold';
+  document.getElementById('em-saleprice').value = c.asking_price != null ? String(c.asking_price).replace('.', ',') : '';
+  document.getElementById('em-sale-fields').style.display = saleChk.checked ? '' : 'none';
   document.getElementById('edit-modal').classList.add('open');
 }
 function closeEditModal() { document.getElementById('edit-modal').classList.remove('open'); editCard = null; }
@@ -2263,11 +2423,15 @@ async function saveEdit() {
     status: sold ? 'sold' : 'owned',
     sold_price: sold ? numDE(document.getElementById('em-soldprice').value) : null,
     sold_date: sold ? (document.getElementById('em-solddate').value || null) : null,
+    // Verkaufte Karten fliegen automatisch aus dem Community-Angebot
+    for_sale: sold ? false : document.getElementById('em-sale').checked,
+    asking_price: numDE(document.getElementById('em-saleprice').value),
   };
   closeEditModal();
   await patchCard(id, body);
 }
 document.getElementById('em-sold').addEventListener('change', e=>{ document.getElementById('em-sold-fields').style.display = e.target.checked ? '' : 'none'; });
+document.getElementById('em-sale').addEventListener('change', e=>{ document.getElementById('em-sale-fields').style.display = e.target.checked ? '' : 'none'; });
 document.getElementById('em-save').addEventListener('click', saveEdit);
 document.getElementById('em-cancel').addEventListener('click', closeEditModal);
 document.getElementById('edit-modal').addEventListener('click', e=>{ if(e.target.id==='edit-modal') closeEditModal(); });
