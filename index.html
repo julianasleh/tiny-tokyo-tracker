@@ -380,6 +380,7 @@
       <a href="#/suche" data-view="suche">Suche</a>
       <a href="#/sammlung" data-view="sammlung">Sammlung <span class="count" id="nav-count"></span></a>
       <a href="#/wunschliste" data-view="wunschliste">Wunschliste <span class="count" id="wish-count"></span></a>
+      <a href="#/marktplatz" data-view="marktplatz">Marktplatz</a>
       <a href="#/analyse" data-view="analyse">Analyse</a>
       <a href="#/community" data-view="community">Community <span class="count" id="cm-nav-unread"></span></a>
       <a href="#/einstellungen" data-view="einstellungen">Einstellungen</a>
@@ -636,24 +637,13 @@
     <div id="sold-list"></div>
   </section>
 
-  <!-- ============ COMMUNITY (Marktplatz) ============ -->
-  <section class="view" id="view-community">
-    <div class="hero">
-      <div>
-        <div class="label">Community · Karten zum Verkauf</div>
-        <div class="value" id="cm-count">0</div>
-        <div class="breakdown">Angebote aller Nutzer. Deine Karten bietest du in der Sammlung über ✎ an – Anzeigename &amp; Kontakt stellst du in den Einstellungen ein.</div>
-      </div>
-      <div class="actions"><button class="ghost" id="cm-reload">Neu laden</button></div>
-    </div>
+  <!-- ============ MARKTPLATZ (Angebote / Gesuche / Trades) ============ -->
+  <section class="view" id="view-marktplatz">
     <div class="filterbar row">
-      <div class="row" id="cm-tabs">
-        <button class="chip active" data-tab="angebote">Angebote &amp; Trades <span class="count" id="cm-trades-tab"></span></button>
-        <button class="chip" data-tab="freunde">Freunde <span class="count" id="cm-friends-tab"></span></button>
-        <button class="chip" data-tab="chat">Chat</button>
-        <button class="chip" data-tab="forum">Forum</button>
-        <button class="chip" data-tab="postfach">Postfach <span class="count" id="cm-unread-tab"></span></button>
-        <button class="chip" data-tab="rangliste">Rangliste</button>
+      <div class="row" id="mp-tabs">
+        <button class="chip active" data-tab="angebote">Angebote</button>
+        <button class="chip" data-tab="gesuche">Gesuche <span class="count" id="mp-seek-tab"></span></button>
+        <button class="chip" data-tab="trades">Trades <span class="count" id="cm-trades-tab"></span></button>
       </div>
     </div>
     <div class="filterbar row" id="cm-filterbar">
@@ -668,8 +658,42 @@
       <input type="text" id="cm-search" placeholder="Angebote durchsuchen…" style="max-width:220px" />
     </div>
     <div id="community-list"></div>
+    <div id="mp-seeking" style="display:none">
+      <div class="filterbar row" id="mp-seek-chips">
+        <button class="chip active" data-sg="">Alle</button>
+        <button class="chip" data-sg="pokemon">Pokémon</button>
+        <button class="chip" data-sg="magic">Magic</button>
+        <button class="chip" data-sg="yugioh">Yu-Gi-Oh</button>
+        <button class="chip" data-sg="onepiece">One Piece</button>
+        <span class="ci-spacer"></span>
+        <label class="msub" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="mp-seek-mine" style="width:auto"/> nur was ich anbieten kann</label>
+      </div>
+      <p class="msub" style="margin:0 0 10px">Karten, die andere Sammler suchen. Eigene Gesuche stellst du in der <b>Wunschliste</b> über <b>🔎 Suche</b> ein.</p>
+      <div id="seeking-list"></div>
+    </div>
     <div id="cm-trades-divider" style="display:none;margin:18px 0 8px;padding-top:12px;border-top:1px solid var(--border)"><h3 style="margin:0">🔄 Trades</h3><p class="msub" style="margin:2px 0 0">Deine laufenden und abgeschlossenen Tauschgeschäfte.</p></div>
     <div id="community-trades" style="display:none"></div>
+  </section>
+
+  <!-- ============ COMMUNITY (Marktplatz) ============ -->
+  <section class="view" id="view-community">
+    <div class="hero">
+      <div>
+        <div class="label">Community · Karten zum Verkauf</div>
+        <div class="value" id="cm-count">0</div>
+        <div class="breakdown">Angebote aller Nutzer. Deine Karten bietest du in der Sammlung über ✎ an – Anzeigename &amp; Kontakt stellst du in den Einstellungen ein.</div>
+      </div>
+      <div class="actions"><button class="ghost" id="cm-reload">Neu laden</button></div>
+    </div>
+    <div class="filterbar row">
+      <div class="row" id="cm-tabs">
+        <button class="chip active" data-tab="freunde">Freunde <span class="count" id="cm-friends-tab"></span></button>
+        <button class="chip" data-tab="chat">Chat</button>
+        <button class="chip" data-tab="forum">Forum</button>
+        <button class="chip" data-tab="postfach">Postfach <span class="count" id="cm-unread-tab"></span></button>
+        <button class="chip" data-tab="rangliste">Rangliste</button>
+      </div>
+    </div>
     <div id="community-inbox" style="display:none"></div>
     <div id="community-board" style="display:none"></div>
 
@@ -1280,6 +1304,25 @@
   </div>
 </div>
 
+<div class="modal-bg" id="seek-modal">
+  <div class="modal">
+    <h3 id="seek-title">Karte suchen</h3>
+    <div class="msub" id="seek-sub"></div>
+    <div class="field"><label>Gewünschter Mindest-Zustand</label>
+      <select id="seek-cond"><option value="">egal</option><option>NM</option><option>EX</option><option>GD</option><option>LP</option><option>PL</option><option>PO</option></select>
+    </div>
+    <div class="mrow">
+      <div class="field"><label>Budget / Maximalpreis</label><input type="text" id="seek-max" placeholder="z. B. 20,00" /></div>
+      <div class="field"><label>Anzahl</label><input type="number" id="seek-qty" min="1" value="1" /></div>
+    </div>
+    <div class="row" style="gap:8px;margin-top:6px">
+      <button id="seek-save">Als Gesuch einstellen</button>
+      <button class="ghost" id="seek-remove" style="display:none">Gesuch entfernen</button>
+      <button class="ghost" id="seek-close">Abbrechen</button>
+    </div>
+    <p class="msub" id="seek-status" style="min-height:1.2em;margin:8px 0 0"></p>
+  </div>
+</div>
 <script src="lib/supabase.js"></script>
 <script src="config.js"></script>
 <script src="content.js"></script>
@@ -1629,7 +1672,7 @@ function buildLangOptions() {
 // ---- Routing ----
 function route() {
   const view = (location.hash.replace('#/','') || 'dashboard');
-  const target = ['dashboard','sammlung','wunschliste','versiegelt','verkauft','analyse','einstellungen','graded','community'].includes(view) ? view : (view === 'suche' ? 'suche' : 'dashboard');
+  const target = ['dashboard','sammlung','wunschliste','versiegelt','verkauft','analyse','einstellungen','graded','community','marktplatz'].includes(view) ? view : (view === 'suche' ? 'suche' : 'dashboard');
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + target).classList.add('active');
   const BESTAND = ['sammlung','versiegelt','graded','verkauft'];
@@ -1648,7 +1691,8 @@ function route() {
   if (target==='verkauft') loadSold();
   if (target==='analyse') { recordOpenSnapshot().then(loadAnalyse); }
   if (target==='graded') loadGraded();
-  if (target==='community') { cmShowTab('angebote'); loadCommunity(); }
+  if (target==='community') { cmShowTab('freunde'); }
+  if (target==='marktplatz') { mpShowTab('angebote'); }
   if (target==='einstellungen') { loadCommunityProfile(); setShowTab('profil'); }
 }
 // Bei jedem Öffnen der Sammlung einen aktuellen Verlaufspunkt für heute festlegen.
@@ -2307,6 +2351,7 @@ function renderWishItem(c) {
         ${sub.length?`<div class="ci-subprice">${sub.join(' · ')}</div>`:''}
         <div class="ci-subprice wtarget" data-act="target" title="Zielpreis setzen/ändern – bei Erreichen wird die Karte markiert">🎯 ${c.target_price!=null?fmt(c.target_price,cur):'Zielpreis setzen'}</div>
       </div>
+      <button class="wtocoll" data-act="seek" title="Öffentlich suchen – erscheint im Marktplatz unter Gesuche">${c.seeking?'🔎 Gesuch aktiv':'🔎 Suche'}</button>
       <button class="wtocoll" data-act="tocoll" title="In die Sammlung übernehmen">→ Sammlung</button>
       <button class="ci-del" data-act="wdel" title="Aus Wunschliste entfernen">✕</button>
     </div>`;
@@ -2316,6 +2361,7 @@ document.getElementById('wishlist').addEventListener('click', async e=>{
   const id = Number(item.dataset.id); const act = e.target.closest('[data-act]')?.dataset.act;
   const c = wishlistItems.find(w=>w.id===id);
   if (act==='detail') openDetail(c);
+  else if (act==='seek') { if (c) openSeekModal(c); }
   else if (act==='target') {
     const cell = item.querySelector('.wtarget');
     if (!cell || cell.querySelector('input')) return;
@@ -2362,17 +2408,12 @@ let wishKeys = new Set();
 function cmShowTab(tab) {
   document.querySelectorAll('#cm-tabs .chip').forEach(c=>c.classList.toggle('active', c.dataset.tab===tab));
   const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; };
-  show('cm-filterbar', tab==='angebote');
-  show('community-list', tab==='angebote');
-  show('cm-trades-divider', tab==='angebote');
-  show('community-trades', tab==='angebote');
   show('community-inbox', tab==='postfach');
   show('community-board', tab==='rangliste');
   show('community-friends', tab==='freunde');
   show('community-chat', tab==='chat');
   show('community-forum', tab==='forum');
   if (tab!=='chat') teardownChat();
-  if (tab==='angebote') loadTrades();
   if (tab==='postfach') loadInbox();
   if (tab==='rangliste') loadBoard();
   if (tab==='freunde') loadFriends();
@@ -2383,6 +2424,115 @@ function cmShowTab(tab) {
 document.getElementById('cm-tabs').addEventListener('click', e=>{
   const chip = e.target.closest('.chip'); if (!chip) return;
   cmShowTab(chip.dataset.tab);
+});
+
+// ===== Marktplatz: Angebote / Gesuche / Trades =====
+function mpShowTab(tab) {
+  document.querySelectorAll('#mp-tabs .chip').forEach(c=>c.classList.toggle('active', c.dataset.tab===tab));
+  const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; };
+  show('cm-filterbar', tab==='angebote');
+  show('community-list', tab==='angebote');
+  show('mp-seeking', tab==='gesuche');
+  show('cm-trades-divider', tab==='trades');
+  show('community-trades', tab==='trades');
+  if (tab==='angebote') loadCommunity();
+  if (tab==='gesuche') loadSeeking();
+  if (tab==='trades') loadTrades();
+}
+document.getElementById('mp-tabs').addEventListener('click', e=>{
+  const chip = e.target.closest('.chip'); if (!chip) return;
+  mpShowTab(chip.dataset.tab);
+});
+
+// ---- Gesuche-Board (was andere suchen) ----
+let seekingItems = [], mpSeekGame = '', mpSeekMine = false;
+function myOwnedKeys() {
+  const set = new Set();
+  for (const c of (collectionCards || [])) if (c.external_id) set.add(c.game + '|' + c.external_id);
+  return set;
+}
+async function loadSeeking() {
+  const el = document.getElementById('seeking-list');
+  el.innerHTML = '<div class="empty">Lade Gesuche…</div>';
+  try { seekingItems = await self.DB.listSeeking(); }
+  catch (e) { el.innerHTML = `<div class="empty">${escapeHtml(e.message || 'Konnte Gesuche nicht laden. Wurde supabase-community-10.sql ausgeführt?')}</div>`; return; }
+  renderSeeking();
+}
+function renderSeeking() {
+  const el = document.getElementById('seeking-list');
+  const owned = myOwnedKeys();
+  let list = seekingItems.filter(c => !mpSeekGame || c.game === mpSeekGame);
+  if (mpSeekMine) list = list.filter(c => !c.is_mine && c.external_id && owned.has(c.game + '|' + c.external_id));
+  const openCount = seekingItems.filter(c => !c.is_mine).length;
+  document.getElementById('mp-seek-tab').textContent = openCount || '';
+  if (!list.length) { el.innerHTML = '<div class="empty">Keine Gesuche gefunden.</div>'; return; }
+  el.innerHTML = list.map(c => {
+    const cur = c.seek_currency || 'EUR';
+    const ref = refText({ setCode: c.set_code, number: c.number });
+    const cflag = countryFlag(c.seeker_country);
+    const iOwn = c.external_id && owned.has(c.game + '|' + c.external_id);
+    const budget = c.seek_max_price != null ? `bis ${fmt(c.seek_max_price, cur)}` : 'Preis VB';
+    return `
+    <div class="collection-item" data-sid="${escapeHtml(c.seeker_id||'')}" data-sname="${escapeHtml(c.seeker_name||'Sammler')}" data-cname="${escapeHtml(c.name||'')}">
+      ${c.image_url ? `<img src="${c.image_url}" alt="" loading="lazy" data-act="zoom" style="cursor:zoom-in" />` : ''}
+      <div class="ci-main">
+        <div class="ci-name">${escapeHtml(c.name)}${c.quantity>1?` ×${c.quantity}`:''}${c.is_mine?'<span class="badge-target">dein Gesuch</span>':''}${(iOwn&&!c.is_mine)?'<span class="badge-target" style="background:#1f7a48">🎯 hast du</span>':''}</div>
+        <div class="ci-sub">${GAME_LABEL[c.game]||c.game} · <span class="flag">${flagFor(c.language)}</span>${escapeHtml(c.set_name||'')}${ref?` · <b>${escapeHtml(ref)}</b>`:''}${c.seek_condition?` · ab ${escapeHtml(c.seek_condition)}`:''}</div>
+        <div class="ci-sub">gesucht von <span data-act="profile" data-uid="${escapeHtml(c.seeker_id||'')}" style="cursor:pointer;border-bottom:1px dotted var(--muted)">${cflag?cflag+' ':''}<b>${escapeHtml(c.seeker_name||'Sammler')}</b>${c.seeker_verified?' 🛡️':''}</span></div>
+      </div>
+      <div class="ci-spacer"></div>
+      <div class="ci-prices"><div class="ci-price" style="cursor:default">${budget}</div></div>
+      ${(!c.is_mine && c.seeker_id) ? '<button class="wtocoll" data-act="offer" title="Dem Sucher anbieten / anschreiben">✉ Anbieten</button>' : ''}
+    </div>`;
+  }).join('');
+}
+document.getElementById('mp-seek-chips').addEventListener('click', e=>{
+  const chip = e.target.closest('.chip[data-sg]'); if (!chip) return;
+  document.querySelectorAll('#mp-seek-chips .chip').forEach(c=>c.classList.toggle('active', c===chip));
+  mpSeekGame = chip.dataset.sg; renderSeeking();
+});
+document.getElementById('mp-seek-mine').addEventListener('change', e=>{ mpSeekMine = e.target.checked; renderSeeking(); });
+document.getElementById('seeking-list').addEventListener('click', e=>{
+  const zoomImg = e.target.closest('[data-act="zoom"]'); if (zoomImg) { openZoom(zoomImg.src.replace('/low.webp','/high.webp')); return; }
+  const prof = e.target.closest('[data-act="profile"]'); if (prof && prof.dataset.uid) { openProfile(prof.dataset.uid); return; }
+  const item = e.target.closest('.collection-item'); if (!item) return;
+  if (e.target.closest('[data-act="offer"]')) openMsgModal(item.dataset.sid, item.dataset.sname || 'Sammler', item.dataset.cname || null);
+});
+
+// ---- Wunschliste: Karte als Gesuch einstellen (Seek-Modal) ----
+let seekCardId = null;
+function openSeekModal(c) {
+  if (!c) return;
+  seekCardId = c.id;
+  document.getElementById('seek-title').textContent = c.seeking ? 'Gesuch bearbeiten' : 'Karte öffentlich suchen';
+  document.getElementById('seek-sub').textContent = c.name + (c.set_name ? ' · ' + c.set_name : '');
+  document.getElementById('seek-cond').value = c.seek_condition || '';
+  document.getElementById('seek-max').value = c.seek_max_price != null ? String(c.seek_max_price).replace('.', ',') : '';
+  document.getElementById('seek-qty').value = c.quantity || 1;
+  document.getElementById('seek-remove').style.display = c.seeking ? '' : 'none';
+  document.getElementById('seek-status').textContent = '';
+  document.getElementById('seek-modal').classList.add('open');
+}
+function closeSeekModal() { document.getElementById('seek-modal').classList.remove('open'); seekCardId = null; }
+document.getElementById('seek-close').addEventListener('click', closeSeekModal);
+document.getElementById('seek-modal').addEventListener('click', e=>{ if (e.target.id==='seek-modal') closeSeekModal(); });
+document.getElementById('seek-save').addEventListener('click', async ()=>{
+  if (seekCardId==null) return;
+  const st = document.getElementById('seek-status'); st.textContent = 'Speichere…';
+  const raw = String(document.getElementById('seek-max').value).trim().replace(',', '.');
+  const maxp = raw==='' ? null : parseFloat(raw);
+  const qty = Math.max(1, parseInt(document.getElementById('seek-qty').value, 10) || 1);
+  const patch = { seeking: true, seek_condition: document.getElementById('seek-cond').value || null,
+    seek_max_price: (maxp!=null && Number.isFinite(maxp) && maxp>=0) ? maxp : null, quantity: qty };
+  try { await fetch('api/wishlist/'+seekCardId, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(patch) });
+    closeSeekModal(); await loadWishlist(); }
+  catch (err) { st.textContent = err.message || 'Fehlgeschlagen.'; }
+});
+document.getElementById('seek-remove').addEventListener('click', async ()=>{
+  if (seekCardId==null) return;
+  try { await fetch('api/wishlist/'+seekCardId, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ seeking: false }) });
+    closeSeekModal(); await loadWishlist(); }
+  catch (err) { document.getElementById('seek-status').textContent = err.message || 'Fehlgeschlagen.'; }
 });
 
 // =====================================================================

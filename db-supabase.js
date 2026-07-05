@@ -362,7 +362,7 @@
     return must(await getClient().from('wishlist').insert(row).select().single());
   }
   async function updateWishlist(id, fields) {
-    const allowed = ['quantity', 'language', 'notes', 'price_current', 'price_low', 'price_trend', 'currency', 'target_price'];
+    const allowed = ['quantity', 'language', 'notes', 'price_current', 'price_low', 'price_trend', 'currency', 'target_price', 'seeking', 'seek_condition', 'seek_max_price', 'seek_currency'];
     const patch = {};
     for (const k of allowed) if (fields[k] !== undefined) patch[k] = fields[k];
     if (!Object.keys(patch).length) return must(await getClient().from('wishlist').select('*').eq('id', id).maybeSingle());
@@ -502,6 +502,10 @@
   // --- Community-Marktplatz (oeffentliche Sicht market_cards) ---------------
   async function listMarket() {
     return must(await getClient().from('market_cards').select('*').order('game', { ascending: true }));
+  }
+  // Oeffentliche Gesuche (was andere suchen) -- Sicht seeking_cards.
+  async function listSeeking() {
+    return must(await getClient().from('seeking_cards').select('*').order('game', { ascending: true }));
   }
 
   // --- Nachrichten -----------------------------------------------------------
@@ -750,7 +754,7 @@
     listChat, sendChat, deleteChat, subscribeChat,
     listThreads, getThread, createThread, createPost, deleteThread, deletePost,
     init, signUp, signIn, signOut, getSession, onAuthChange, resetPassword, updatePassword,
-    getSetting, setSetting, listMarket,
+    getSetting, setSetting, listMarket, listSeeking,
     listMessages, unreadMessages, sendMessage, markMessagesRead, deleteMessage, leaderboard,
     getProfile, listRatings, rateUser, deleteRating,
     listTrades, createTrade, updateTrade, openTradesCount,
