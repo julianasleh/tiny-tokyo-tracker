@@ -442,11 +442,19 @@
   const OP_TTL = 12 * 3600 * 1000;
   async function loadOnePieceCards() {
     if (opCache.cards && Date.now() - opCache.at < OP_TTL) return opCache.cards;
-    const [sets, st] = await Promise.all([
+    // Booster-Sets, Starter-Decks UND Promo-/Turnierkarten laden. Die Promo-Tabelle
+    // enthält auch die Turnier-Karten (Winner/Finalist/Participant, Store-Championship-
+    // Trophy, Super-Pre-Release usw.) – dieselben Feldnamen wie bei Set-/ST-Karten.
+    const [sets, st, promo] = await Promise.all([
       get('https://optcgapi.com/api/allSetCards/').catch(() => []),
       get('https://optcgapi.com/api/allSTCards/').catch(() => []),
+      get('https://optcgapi.com/api/allPromoCards/').catch(() => []),
     ]);
-    const cards = [...(Array.isArray(sets) ? sets : []), ...(Array.isArray(st) ? st : [])];
+    const cards = [
+      ...(Array.isArray(sets) ? sets : []),
+      ...(Array.isArray(st) ? st : []),
+      ...(Array.isArray(promo) ? promo : []),
+    ];
     if (cards.length) opCache = { cards, at: Date.now() };
     return cards;
   }
@@ -620,19 +628,18 @@
         return { price: yp.price, low: null, trend: null, currency: yp.currency };
       }
       if (game === 'onepiece') {
-        const baseId = String(externalId).replace(/_p\d+$/, '');
-        const arr = await get(`https://optcgapi.com/api/sets/card/${baseId}/`);
-        const row = (Array.isArray(arr) ? arr : []).find((c) => (c.card_image_id || c.card_set_id) === externalId) || (arr && arr[0]);
+        // card_set_id aus der externalId lösen (Bild-Suffixe wie "_pr12"/"_p1" abtrennen)
+        // und den passenden Endpunkt wählen: Promos (P-…), Starter-Decks (ST…) oder Sets.
+        const setId = String(externalId).split('_')[0];
+        const path = /^P-/i.test(setId) ? 'promos' : /^ST/i.test(setId) ? 'decks' : 'sets';
+        const arr = await get(`https://optcgapi.com/api/${path}/card/${encodeURIComponent(setId)}/`);
+        const list = Array.isArray(arr) ? arr : [];
+        const row = list.find((c) => (c.card_image_id || c.card_set_id) === externalId) || list[0];
         return { price: posOrNull(row && row.market_price), low: posOrNull(row && row.inventory_price), trend: null, currency: 'USD' };
       }
     } catch { return { price: null, low: null, trend: null }; }
     return { price: null, low: null, trend: null };
   }
-
   const SUPPORTED_GAMES = Object.keys(GAMES);
-
-  self.Adapters = {
-    LANGUAGES, NUMBER_SEARCH, SUPPORTED_GAMES,
-    langFor, search, fetchPrices, enrichPokemon, searchGraded, searchSets, onePieceNames,
-  };
+  self.Adapters = { LANGUAGES, NUMBER_SEARCH, SUPPORTED_GAMES, langFor, search, fetchPrices, enrichPokemon, searchGraded, searchSets, onePieceNames };
 })();
