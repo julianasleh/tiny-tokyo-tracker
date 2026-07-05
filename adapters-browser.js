@@ -445,15 +445,13 @@
     // Booster-Sets, Starter-Decks UND Promo-/Turnierkarten laden. Die Promo-Tabelle
     // enthält auch die Turnier-Karten (Winner/Finalist/Participant, Store-Championship-
     // Trophy, Super-Pre-Release usw.) – dieselben Feldnamen wie bei Set-/ST-Karten.
-    const [sets, st, promo] = await Promise.all([
+    const [sets, st] = await Promise.all([
       get('https://optcgapi.com/api/allSetCards/').catch(() => []),
       get('https://optcgapi.com/api/allSTCards/').catch(() => []),
-      get('https://optcgapi.com/api/allPromoCards/').catch(() => []),
     ]);
     const cards = [
       ...(Array.isArray(sets) ? sets : []),
       ...(Array.isArray(st) ? st : []),
-      ...(Array.isArray(promo) ? promo : []),
     ];
     if (cards.length) opCache = { cards, at: Date.now() };
     return cards;
@@ -496,6 +494,21 @@
         const okSet = !setPart || String(parts[0] || '').toUpperCase() === setPart.toUpperCase();
         return okNum && okSet;
       });
+      // Promo-/Turnierkarten liegen NICHT in der Bulk-Liste -- /allPromoCards/
+      // liefert derzeit leer. Bei Promo-Nummer (Set "P", z. B. "P-001") deshalb
+      // direkt die funktionierende Einzel-Route /promos/card/{P-XXX}/ nachladen.
+      if (setPart && /^P$/i.test(setPart) && cardNum != null) {
+        const pid = 'P-' + String(cardNum).padStart(3, '0');
+        try {
+          const arr = await get(`https://optcgapi.com/api/promos/card/${encodeURIComponent(pid)}/`);
+          const rows = Array.isArray(arr) ? arr : [];
+          const seen = new Set(matches.map((m) => m.card_image_id || m.card_set_id));
+          for (const r of rows) {
+            const id = r.card_image_id || r.card_set_id;
+            if (id && !seen.has(id)) { seen.add(id); matches.push(r); }
+          }
+        } catch {}
+      }
     } else {
       const t = q.toLowerCase();
       matches = cards.filter((c) => String(c.card_name || '').toLowerCase().includes(t));

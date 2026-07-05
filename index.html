@@ -648,11 +648,10 @@
     </div>
     <div class="filterbar row">
       <div class="row" id="cm-tabs">
-        <button class="chip active" data-tab="angebote">Angebote</button>
+        <button class="chip active" data-tab="angebote">Angebote &amp; Trades <span class="count" id="cm-trades-tab"></span></button>
         <button class="chip" data-tab="freunde">Freunde <span class="count" id="cm-friends-tab"></span></button>
         <button class="chip" data-tab="chat">Chat</button>
         <button class="chip" data-tab="forum">Forum</button>
-        <button class="chip" data-tab="trades">Trades <span class="count" id="cm-trades-tab"></span></button>
         <button class="chip" data-tab="postfach">Postfach <span class="count" id="cm-unread-tab"></span></button>
         <button class="chip" data-tab="rangliste">Rangliste</button>
       </div>
@@ -669,6 +668,7 @@
       <input type="text" id="cm-search" placeholder="Angebote durchsuchen…" style="max-width:220px" />
     </div>
     <div id="community-list"></div>
+    <div id="cm-trades-divider" style="display:none;margin:18px 0 8px;padding-top:12px;border-top:1px solid var(--border)"><h3 style="margin:0">🔄 Trades</h3><p class="msub" style="margin:2px 0 0">Deine laufenden und abgeschlossenen Tauschgeschäfte.</p></div>
     <div id="community-trades" style="display:none"></div>
     <div id="community-inbox" style="display:none"></div>
     <div id="community-board" style="display:none"></div>
@@ -2364,14 +2364,15 @@ function cmShowTab(tab) {
   const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; };
   show('cm-filterbar', tab==='angebote');
   show('community-list', tab==='angebote');
-  show('community-trades', tab==='trades');
+  show('cm-trades-divider', tab==='angebote');
+  show('community-trades', tab==='angebote');
   show('community-inbox', tab==='postfach');
   show('community-board', tab==='rangliste');
   show('community-friends', tab==='freunde');
   show('community-chat', tab==='chat');
   show('community-forum', tab==='forum');
   if (tab!=='chat') teardownChat();
-  if (tab==='trades') loadTrades();
+  if (tab==='angebote') loadTrades();
   if (tab==='postfach') loadInbox();
   if (tab==='rangliste') loadBoard();
   if (tab==='freunde') loadFriends();
