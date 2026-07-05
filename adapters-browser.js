@@ -456,6 +456,61 @@
     if (cards.length) opCache = { cards, at: Date.now() };
     return cards;
   }
+  // Promo-/Turnierkarten (Set "P") gibt es nur ueber die Einzel-Route
+  // /promos/card/{P-XXX}/ -- der Bulk-Endpunkt /allPromoCards/ liefert leer.
+  // Fuer die NAMENS-Suche werden die Promos deshalb einmalig ueber ihre
+  // fortlaufenden Nummern eingesammelt und gecacht (In-Memory + localStorage,
+  // 24 h), damit die API nicht bei jeder Suche erneut ~100 Anfragen bekommt.
+  let opPromoCache = { cards: null, at: 0 };
+  const OP_PROMO_TTL = 24 * 3600 * 1000;
+  const OP_PROMO_LS = 'ttt_op_promos_v1';
+  function readPromoLS() {
+    try {
+      const raw = self.localStorage && self.localStorage.getItem(OP_PROMO_LS);
+      if (!raw) return null;
+      const o = JSON.parse(raw);
+      if (o && Array.isArray(o.cards) && (Date.now() - o.at) < OP_PROMO_TTL) return o;
+    } catch {}
+    return null;
+  }
+  function writePromoLS(cards) {
+    try { if (self.localStorage) self.localStorage.setItem(OP_PROMO_LS, JSON.stringify({ at: Date.now(), cards })); } catch {}
+  }
+  async function loadOnePiecePromos() {
+    if (opPromoCache.cards && Date.now() - opPromoCache.at < OP_PROMO_TTL) return opPromoCache.cards;
+    const ls = readPromoLS();
+    if (ls) { opPromoCache = { cards: ls.cards, at: ls.at }; return ls.cards; }
+    const all = [];
+    const MAX = 180, BATCH = 8, STOP_EMPTY_BATCHES = 3;
+    let emptyStreak = 0;
+    for (let start = 1; start <= MAX; start += BATCH) {
+      const nums = [];
+      for (let n = start; n < start + BATCH && n <= MAX; n++) nums.push(n);
+      const arrays = await Promise.all(nums.map((n) => {
+        const pid = 'P-' + String(n).padStart(3, '0');
+        return get(`https://optcgapi.com/api/promos/card/${pid}/`).catch(() => null);
+      }));
+      let got = 0;
+      for (const arr of arrays) if (Array.isArray(arr) && arr.length) { all.push(...arr); got += arr.length; }
+      if (got === 0) { if (++emptyStreak >= STOP_EMPTY_BATCHES) break; } else emptyStreak = 0;
+    }
+    if (all.length) { opPromoCache = { cards: all, at: Date.now() }; writePromoLS(all); }
+    return all;
+  }
+  // Promo-Prints EINER Karte (auch mit regulaerer Set-Nummer wie "OP09-077" oder
+  // "ST03-017"): Premium Collection, Serialized, Magazine, Judge, Convention,
+  // Film, Gift Campaign, Pre-Release, Starter-Deck-Bonus usw. Ergebnis wird pro
+  // Kartennummer gecacht, damit wiederholte Suchen keine neuen Abfragen ausloesen.
+  const opPromoById = new Map();
+  async function promosForSetId(id) {
+    if (!id) return [];
+    if (opPromoById.has(id)) return opPromoById.get(id);
+    let rows = [];
+    try { const a = await get(`https://optcgapi.com/api/promos/card/${encodeURIComponent(id)}/`); rows = Array.isArray(a) ? a : []; }
+    catch {}
+    opPromoById.set(id, rows);
+    return rows;
+  }
   function mapOnePiece(c) {
     return {
       game: 'onepiece', externalId: c.card_image_id || c.card_set_id, name: c.card_name,
@@ -469,6 +524,10 @@
   }
   async function onePieceNames() {
     const cards = await loadOnePieceCards();
+    // Promos im Hintergrund vorwaermen (fire-and-forget): sobald "One Piece"
+    // gewaehlt wird, sammelt der Loader die P-Promos ein und legt sie 24 h in
+    // localStorage ab -- so findet die Namenssuche sie danach sofort.
+    loadOnePiecePromos().catch(() => {});
     return [...new Set(cards.map((c) => c.card_name).filter(Boolean))].sort();
   }
 
@@ -509,9 +568,40 @@
           }
         } catch {}
       }
+      // Promo-Prints regulaer nummerierter Karten (Premium Collection, Serialized,
+      // Magazine, Judge …) fuer die getroffenen Nummern gezielt nachladen, damit
+      // auch die Nummernsuche die Spezial-Versionen zeigt (z. B. "OP09-077").
+      try {
+        const pids = [...new Set(matches.map((c) => c.card_set_id).filter((x) => x && !/^P-/i.test(x)))].slice(0, 40);
+        const lists = await mapLimit(pids, 10, (id) => promosForSetId(id));
+        const seen2 = new Set(matches.map((m) => m.card_image_id || m.card_set_id));
+        for (const rows of lists) for (const r of rows) {
+          const id = r.card_image_id || r.card_set_id;
+          if (id && !seen2.has(id)) { seen2.add(id); matches.push(r); }
+        }
+      } catch {}
     } else {
       const t = q.toLowerCase();
-      matches = cards.filter((c) => String(c.card_name || '').toLowerCase().includes(t));
+      const base = cards.filter((c) => String(c.card_name || '').toLowerCase().includes(t));
+      matches = base.slice();
+      const seen = new Set(matches.map((m) => m.card_image_id || m.card_set_id));
+      const addRow = (r) => {
+        if (!String(r.card_name || '').toLowerCase().includes(t)) return;
+        const id = r.card_image_id || r.card_set_id;
+        if (id && !seen.has(id)) { seen.add(id); matches.push(r); }
+      };
+      // 1) Reine P-Promos (Turnier: Participation/Winner/Top-Cut/Championship,
+      //    Store, Film, Magazine, Gift Campaign, Convention, Judge, Serialized,
+      //    Pre-Release, Starter-Deck-Bonus …) aus der vorgeladenen Liste.
+      try { for (const r of await loadOnePiecePromos()) addRow(r); } catch {}
+      // 2) Promo-Prints mit regulaerer Set-Nummer (z. B. "OP09-077" Premium
+      //    Collection): gezielt fuer die gefundenen Basiskarten nachladen --
+      //    die Promo-Version teilt sich die Kartennummer mit der Basiskarte.
+      try {
+        const ids = [...new Set(base.map((c) => c.card_set_id).filter(Boolean))].slice(0, 60);
+        const lists = await mapLimit(ids, 10, (id) => promosForSetId(id));
+        for (const rows of lists) for (const r of rows) addRow(r);
+      } catch {}
     }
     return matches.slice(0, SAFETY_MAX).map(mapOnePiece);
   }
