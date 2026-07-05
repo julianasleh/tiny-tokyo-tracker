@@ -620,7 +620,135 @@
     return (count || 0) > 0;
   }
 
+  // --- Community: Freunde ----------------------------------------------------
+  // Eigene ID (fuer "meine Nachricht?"/Loeschen-Buttons im Frontend).
+  async function myId() { return await requireUserId(); }
+
+  // friendships_view liefert beide Seiten aufgeloest -- hier auf die Sicht des
+  // eingeloggten Nutzers normalisieren (wer ist der/die "andere").
+  function normalizeFriend(r, uid) {
+    const iAmRequester = r.requester === uid;
+    return {
+      id: r.id, status: r.status,
+      otherId: iAmRequester ? r.addressee : r.requester,
+      name: iAmRequester ? r.addressee_name : r.requester_name,
+      country: iAmRequester ? r.addressee_country : r.requester_country,
+      incoming: r.status === 'pending' && !iAmRequester, // eingegangene Anfrage
+      outgoing: r.status === 'pending' && iAmRequester,   // von mir gesendet
+      created_at: r.created_at,
+    };
+  }
+  async function listFriends() {
+    const uid = await requireUserId();
+    const rows = must(await getClient().from('friendships_view').select('*'));
+    return rows.map((r) => normalizeFriend(r, uid));
+  }
+  async function sendFriendRequest(addressee) {
+    const uid = await requireUserId();
+    if (!addressee || addressee === uid) throw new Error('Das bist du selbst.');
+    const existing = must(await getClient().from('friendships').select('id,status')
+      .or(`and(requester.eq.${uid},addressee.eq.${addressee}),and(requester.eq.${addressee},addressee.eq.${uid})`));
+    if (existing && existing.length) {
+      throw new Error(existing[0].status === 'accepted' ? 'Ihr seid bereits befreundet.' : 'Es besteht bereits eine Anfrage.');
+    }
+    const { error } = await getClient().from('friendships').insert({ requester: uid, addressee });
+    if (error) throw new Error(error.message);
+  }
+  async function acceptFriend(id) {
+    const { error } = await getClient().from('friendships').update({ status: 'accepted', updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) throw new Error(error.message);
+  }
+  // Ablehnen, Anfrage zuruecknehmen oder Freund entfernen -- immer Loeschen der Zeile.
+  async function removeFriend(id) {
+    const { error } = await getClient().from('friendships').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  }
+
+  // --- Community: Presence (Online-Status ueber Realtime, keine Tabelle) ------
+  function joinPresence(meta, onSync) {
+    const c = getClient();
+    let uid = currentUserId;
+    const ch = c.channel('presence:community', { config: { presence: { key: uid || 'anon' } } });
+    ch.on('presence', { event: 'sync' }, () => {
+      const state = ch.presenceState();
+      const online = {};
+      for (const key of Object.keys(state)) {
+        const first = (state[key] && state[key][0]) || {};
+        online[first.user_id || key] = first.name || 'Sammler';
+      }
+      if (typeof onSync === 'function') onSync(online);
+    });
+    ch.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        if (!uid) { try { uid = await requireUserId(); } catch {} }
+        await ch.track(Object.assign({ user_id: uid, online_at: new Date().toISOString() }, meta || {}));
+      }
+    });
+    return ch;
+  }
+  function leaveChannel(ch) { try { if (ch) getClient().removeChannel(ch); } catch {} }
+
+  // --- Community: Chat (Live via Realtime) -----------------------------------
+  async function listChat(room) {
+    const rows = must(await getClient().from('chat_messages').select('*').eq('room', room).order('created_at', { ascending: false }).limit(80));
+    return rows.reverse();
+  }
+  async function sendChat(room, body) {
+    const uid = await requireUserId();
+    const { data, error } = await getClient().from('chat_messages').insert({ room, user_id: uid, body }).select().single();
+    if (error) throw new Error(error.message);
+    return data;
+  }
+  async function deleteChat(id) {
+    const { error } = await getClient().from('chat_messages').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  }
+  // Realtime-Abo fuer neue Nachrichten eines Raums. onInsert(row) je neuer Zeile.
+  function subscribeChat(room, onInsert) {
+    const ch = getClient()
+      .channel('chat:' + room)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: 'room=eq.' + room },
+          (payload) => { if (typeof onInsert === 'function') onInsert(payload.new); })
+      .subscribe();
+    return ch;
+  }
+
+  // --- Community: Forum ------------------------------------------------------
+  async function listThreads(category) {
+    return must(await getClient().from('forum_threads_view').select('*').eq('category', category).order('last_activity', { ascending: false }).limit(100));
+  }
+  async function getThread(id) {
+    const thread = must(await getClient().from('forum_threads_view').select('*').eq('id', id).maybeSingle());
+    const posts = must(await getClient().from('forum_posts').select('*').eq('thread_id', id).order('created_at', { ascending: true }));
+    return { thread, posts };
+  }
+  async function createThread(category, title, body) {
+    const uid = await requireUserId();
+    const { data, error } = await getClient().from('forum_threads').insert({ category, user_id: uid, title, body }).select().single();
+    if (error) throw new Error(error.message);
+    return data;
+  }
+  async function createPost(threadId, body) {
+    const uid = await requireUserId();
+    const { data, error } = await getClient().from('forum_posts').insert({ thread_id: threadId, user_id: uid, body }).select().single();
+    if (error) throw new Error(error.message);
+    return data;
+  }
+  async function deleteThread(id) {
+    const { error } = await getClient().from('forum_threads').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  }
+  async function deletePost(id) {
+    const { error } = await getClient().from('forum_posts').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  }
+
   window.DB = {
+    myId,
+    listFriends, sendFriendRequest, acceptFriend, removeFriend,
+    joinPresence, leaveChannel,
+    listChat, sendChat, deleteChat, subscribeChat,
+    listThreads, getThread, createThread, createPost, deleteThread, deletePost,
     init, signUp, signIn, signOut, getSession, onAuthChange, resetPassword, updatePassword,
     getSetting, setSetting, listMarket,
     listMessages, unreadMessages, sendMessage, markMessagesRead, deleteMessage, leaderboard,

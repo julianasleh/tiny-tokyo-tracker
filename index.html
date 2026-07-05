@@ -649,6 +649,9 @@
     <div class="filterbar row">
       <div class="row" id="cm-tabs">
         <button class="chip active" data-tab="angebote">Angebote</button>
+        <button class="chip" data-tab="freunde">Freunde <span class="count" id="cm-friends-tab"></span></button>
+        <button class="chip" data-tab="chat">Chat</button>
+        <button class="chip" data-tab="forum">Forum</button>
         <button class="chip" data-tab="trades">Trades <span class="count" id="cm-trades-tab"></span></button>
         <button class="chip" data-tab="postfach">Postfach <span class="count" id="cm-unread-tab"></span></button>
         <button class="chip" data-tab="rangliste">Rangliste</button>
@@ -669,6 +672,46 @@
     <div id="community-trades" style="display:none"></div>
     <div id="community-inbox" style="display:none"></div>
     <div id="community-board" style="display:none"></div>
+
+    <!-- Freunde -->
+    <div id="community-friends" style="display:none">
+      <div id="fr-requests"></div>
+      <div id="fr-list"><div class="empty">Lade Freunde…</div></div>
+      <p class="msub" style="margin-top:10px">Neue Freunde findest du über die Profile anderer Sammler (z. B. im Chat oder bei Angeboten auf den Namen tippen → <b>➕ Freund</b>).</p>
+    </div>
+
+    <!-- Chat -->
+    <div id="community-chat" style="display:none">
+      <div class="filterbar row" id="chat-rooms">
+        <button class="chip active" data-room="general">💬 Allgemein</button>
+        <button class="chip" data-room="pokemon">Pokémon</button>
+        <button class="chip" data-room="magic">Magic</button>
+        <button class="chip" data-room="yugioh">Yu-Gi-Oh</button>
+        <button class="chip" data-room="onepiece">One Piece</button>
+        <span class="ci-spacer"></span>
+        <span class="msub" id="chat-online" title="Gerade online"></span>
+      </div>
+      <div id="chat-log" style="max-height:52vh;overflow:auto;display:flex;flex-direction:column;gap:8px;padding:6px 2px"></div>
+      <form id="chat-form" class="row" style="gap:8px;margin-top:10px" autocomplete="off">
+        <input type="text" id="chat-input" maxlength="1000" placeholder="Nachricht schreiben…" style="flex:1" />
+        <button type="submit">Senden</button>
+      </form>
+    </div>
+
+    <!-- Forum -->
+    <div id="community-forum" style="display:none">
+      <div class="filterbar row" id="forum-cats">
+        <button class="chip active" data-cat="general">Allgemein</button>
+        <button class="chip" data-cat="pokemon">Pokémon</button>
+        <button class="chip" data-cat="magic">Magic</button>
+        <button class="chip" data-cat="yugioh">Yu-Gi-Oh</button>
+        <button class="chip" data-cat="onepiece">One Piece</button>
+        <button class="chip" data-cat="offtopic">Offtopic</button>
+        <span class="ci-spacer"></span>
+        <button class="ghost" id="forum-new-btn" type="button">+ Neues Thema</button>
+      </div>
+      <div id="forum-body"></div>
+    </div>
   </section>
 
   <!-- ============ INFO ============ -->
@@ -1061,6 +1104,7 @@
     <div class="msub" id="pf-contact" style="margin-bottom:10px"></div>
     <div class="row" style="gap:8px;margin-bottom:12px">
       <button id="pf-msg">✉ Nachricht senden</button>
+      <button class="ghost" id="pf-friend" style="display:none"></button>
     </div>
     <div id="pf-fb-summary"></div>
     <div id="pf-ratings"></div>
@@ -2317,19 +2361,247 @@ let wishKeys = new Set();
 
 function cmShowTab(tab) {
   document.querySelectorAll('#cm-tabs .chip').forEach(c=>c.classList.toggle('active', c.dataset.tab===tab));
-  document.getElementById('cm-filterbar').style.display = tab==='angebote' ? '' : 'none';
-  document.getElementById('community-list').style.display = tab==='angebote' ? '' : 'none';
-  document.getElementById('community-trades').style.display = tab==='trades' ? '' : 'none';
-  document.getElementById('community-inbox').style.display = tab==='postfach' ? '' : 'none';
-  document.getElementById('community-board').style.display = tab==='rangliste' ? '' : 'none';
+  const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; };
+  show('cm-filterbar', tab==='angebote');
+  show('community-list', tab==='angebote');
+  show('community-trades', tab==='trades');
+  show('community-inbox', tab==='postfach');
+  show('community-board', tab==='rangliste');
+  show('community-friends', tab==='freunde');
+  show('community-chat', tab==='chat');
+  show('community-forum', tab==='forum');
+  if (tab!=='chat') teardownChat();
   if (tab==='trades') loadTrades();
   if (tab==='postfach') loadInbox();
   if (tab==='rangliste') loadBoard();
+  if (tab==='freunde') loadFriends();
+  if (tab==='chat') enterChat();
+  if (tab==='forum') loadForum();
+  ensurePresence();
 }
 document.getElementById('cm-tabs').addEventListener('click', e=>{
   const chip = e.target.closest('.chip'); if (!chip) return;
   cmShowTab(chip.dataset.tab);
 });
+
+// =====================================================================
+// Community-Social: Presence (Online-Status), Freunde, Chat, Forum
+// =====================================================================
+let myUid = null;
+async function ensureMyUid() { if (!myUid) { try { myUid = await self.DB.myId(); } catch {} } return myUid; }
+async function myDisplayName() { try { return (await self.DB.getSetting('displayName')) || 'Sammler'; } catch { return 'Sammler'; } }
+
+// ---- Presence: läuft, solange man im Community-Bereich ist ----
+let presenceCh = null, onlineUsers = {};
+async function ensurePresence() {
+  if (presenceCh) { renderPresenceDependent(); return; }
+  const name = await myDisplayName();
+  await ensureMyUid();
+  presenceCh = self.DB.joinPresence({ name }, (online) => { onlineUsers = online; renderPresenceDependent(); });
+}
+function isOnline(uid) { return uid && Object.prototype.hasOwnProperty.call(onlineUsers, uid); }
+function onlineCount() { return Object.keys(onlineUsers).length; }
+function renderPresenceDependent() {
+  const co = document.getElementById('chat-online');
+  if (co) co.textContent = onlineCount() ? `🟢 ${onlineCount()} online` : '';
+  if (document.getElementById('community-friends') && document.getElementById('community-friends').style.display !== 'none') paintFriendsOnline();
+}
+
+// ---- Freunde ----
+let friendsCache = [];
+async function loadFriends() {
+  const listEl = document.getElementById('fr-list');
+  const reqEl = document.getElementById('fr-requests');
+  listEl.innerHTML = '<div class="empty">Lade Freunde…</div>'; reqEl.innerHTML = '';
+  await ensureMyUid();
+  try { friendsCache = await self.DB.listFriends(); }
+  catch (e) { listEl.innerHTML = `<div class="empty">${escapeHtml(e.message||'Konnte Freunde nicht laden. Wurde die neue SQL-Datei ausgeführt?')}</div>`; return; }
+  const incoming = friendsCache.filter(f=>f.incoming);
+  const outgoing = friendsCache.filter(f=>f.outgoing);
+  const friends  = friendsCache.filter(f=>f.status==='accepted');
+  document.getElementById('cm-friends-tab').textContent = incoming.length ? incoming.length : '';
+  const flag = (c)=>{ const fl=countryFlag(c); return fl?fl+' ':''; };
+  reqEl.innerHTML = incoming.length ? `<div class="an-card" style="margin:0 0 12px"><h3>Freundschaftsanfragen</h3>${incoming.map(f=>`
+      <div class="collection-item" data-fid="${f.id}" data-uid="${escapeHtml(f.otherId)}">
+        <div class="ci-main"><div class="ci-name">${flag(f.country)}<span data-act="fprofile" style="cursor:pointer;border-bottom:1px dotted var(--muted)">${escapeHtml(f.name)}</span> ${isOnline(f.otherId)?'<span style="color:#5bd08a">● online</span>':''}</div></div>
+        <div class="ci-spacer"></div>
+        <button class="wtocoll" data-act="accept" title="Annehmen">✓ Annehmen</button>
+        <button class="wtocoll" data-act="decline" title="Ablehnen">✕</button>
+      </div>`).join('')}</div>` : '';
+  const rows = [];
+  if (friends.length) rows.push(friends.map(f=>`
+      <div class="collection-item" data-fid="${f.id}" data-uid="${escapeHtml(f.otherId)}">
+        <div class="ci-main">
+          <div class="ci-name">${flag(f.country)}<span data-act="fprofile" style="cursor:pointer;border-bottom:1px dotted var(--muted)">${escapeHtml(f.name)}</span>
+            ${isOnline(f.otherId)?'<span class="badge-target" style="background:#1f7a48">● online</span>':'<span class="msub" style="margin-left:6px">offline</span>'}</div>
+        </div>
+        <div class="ci-spacer"></div>
+        <button class="wtocoll" data-act="fmsg" title="Nachricht senden">✉</button>
+        <button class="wtocoll" data-act="unfriend" title="Freund entfernen">Entfernen</button>
+      </div>`).join(''));
+  if (outgoing.length) rows.push(`<div class="msub" style="margin:12px 0 4px">Gesendete Anfragen</div>` + outgoing.map(f=>`
+      <div class="collection-item" data-fid="${f.id}" data-uid="${escapeHtml(f.otherId)}">
+        <div class="ci-main"><div class="ci-name">${flag(f.country)}${escapeHtml(f.name)} <span class="msub">· wartet auf Bestätigung</span></div></div>
+        <div class="ci-spacer"></div>
+        <button class="wtocoll" data-act="cancel" title="Anfrage zurücknehmen">Zurücknehmen</button>
+      </div>`).join(''));
+  listEl.innerHTML = friends.length || outgoing.length ? rows.join('') : '<div class="empty">Noch keine Freunde. Tippe im Chat oder bei Angeboten auf einen Namen und schicke eine Anfrage.</div>';
+}
+function paintFriendsOnline() { loadFriendsQuietPaint(); }
+// Nur die Online-Markierungen neu zeichnen wäre feiner; einfach neu rendern reicht hier.
+let _friendsRepaintTimer = null;
+function loadFriendsQuietPaint() {
+  clearTimeout(_friendsRepaintTimer);
+  _friendsRepaintTimer = setTimeout(()=>{ if (document.getElementById('community-friends').style.display!=='none') loadFriends(); }, 300);
+}
+document.getElementById('community-friends').addEventListener('click', async e=>{
+  const prof = e.target.closest('[data-act="fprofile"]');
+  if (prof) { const uid=e.target.closest('[data-uid]')?.dataset.uid; if (uid) openProfile(uid); return; }
+  const btn = e.target.closest('[data-act]'); if (!btn) return;
+  const item = e.target.closest('[data-fid]'); const fid = item && item.dataset.fid; const uid = item && item.dataset.uid;
+  const act = btn.dataset.act;
+  try {
+    if (act==='accept') { await self.DB.acceptFriend(fid); }
+    else if (act==='decline'||act==='unfriend'||act==='cancel') { await self.DB.removeFriend(fid); }
+    else if (act==='fmsg') { openMsgModal(uid, item.querySelector('.ci-name')?.textContent.trim() || 'Sammler', null); return; }
+    loadFriends();
+  } catch (err) { alert(err.message || 'Aktion fehlgeschlagen.'); }
+});
+
+// ---- Chat (Live via Realtime) ----
+let chatRoom = 'general', chatSub = null;
+function teardownChat() { if (chatSub) { self.DB.leaveChannel(chatSub); chatSub = null; } }
+async function enterChat() {
+  await ensureMyUid();
+  teardownChat();
+  const log = document.getElementById('chat-log');
+  log.innerHTML = '<div class="empty">Lade Nachrichten…</div>';
+  let msgs = [];
+  try { msgs = await self.DB.listChat(chatRoom); }
+  catch (e) { log.innerHTML = `<div class="empty">${escapeHtml(e.message||'Konnte Chat nicht laden. Wurde die neue SQL-Datei ausgeführt?')}</div>`; return; }
+  log.innerHTML = msgs.length ? '' : '<div class="empty">Noch keine Nachrichten – schreib die erste!</div>';
+  msgs.forEach(appendChatMsg);
+  scrollChatBottom();
+  chatSub = self.DB.subscribeChat(chatRoom, (row)=>{ appendChatMsg(row); scrollChatBottom(); });
+}
+function chatBubble(m) {
+  const mine = m.user_id === myUid;
+  const flag = countryFlag(m.author_country); const t = new Date(m.created_at).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+  const del = mine ? ` <span data-act="delmsg" data-id="${m.id}" style="cursor:pointer;color:var(--muted)" title="Löschen">✕</span>` : '';
+  return `<div class="chat-msg" data-id="${m.id}" style="align-self:${mine?'flex-end':'flex-start'};max-width:80%;background:${mine?'var(--accent-soft, #24304a)':'var(--surface-2)'};border:1px solid var(--border);border-radius:12px;padding:7px 11px">
+      <div class="msub" style="font-size:.78em;margin-bottom:2px">${mine?'':`<span data-act="cprofile" data-uid="${escapeHtml(m.user_id)}" style="cursor:pointer">${flag?flag+' ':''}<b>${escapeHtml(m.author_name||'Sammler')}</b></span> · `}${t}${del}</div>
+      <div style="white-space:pre-wrap;word-break:break-word">${escapeHtml(m.body)}</div>
+    </div>`;
+}
+function appendChatMsg(m) {
+  const log = document.getElementById('chat-log');
+  const empty = log.querySelector('.empty'); if (empty) empty.remove();
+  if (log.querySelector(`.chat-msg[data-id="${m.id}"]`)) return; // Duplikat (eigene Nachricht + Realtime-Echo)
+  log.insertAdjacentHTML('beforeend', chatBubble(m));
+}
+function scrollChatBottom() { const log = document.getElementById('chat-log'); log.scrollTop = log.scrollHeight; }
+document.getElementById('chat-rooms').addEventListener('click', e=>{
+  const chip = e.target.closest('.chip[data-room]'); if (!chip) return;
+  document.querySelectorAll('#chat-rooms .chip').forEach(c=>c.classList.toggle('active', c===chip));
+  chatRoom = chip.dataset.room; enterChat();
+});
+document.getElementById('chat-form').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const inp = document.getElementById('chat-input'); const body = inp.value.trim(); if (!body) return;
+  inp.value = ''; inp.focus();
+  try { const row = await self.DB.sendChat(chatRoom, body); appendChatMsg(row); scrollChatBottom(); }
+  catch (err) { alert(err.message || 'Nachricht konnte nicht gesendet werden.'); inp.value = body; }
+});
+document.getElementById('chat-log').addEventListener('click', async e=>{
+  const p = e.target.closest('[data-act="cprofile"]'); if (p && p.dataset.uid) { openProfile(p.dataset.uid); return; }
+  const d = e.target.closest('[data-act="delmsg"]'); if (d) { try { await self.DB.deleteChat(d.dataset.id); const el=d.closest('.chat-msg'); if(el) el.remove(); } catch(err){ alert(err.message); } }
+});
+
+// ---- Forum ----
+let forumCat = 'general';
+const FORUM_CAT_LABEL = { general:'Allgemein', pokemon:'Pokémon', magic:'Magic', yugioh:'Yu-Gi-Oh', onepiece:'One Piece', offtopic:'Offtopic' };
+async function loadForum() {
+  await ensureMyUid();
+  const box = document.getElementById('forum-body');
+  box.innerHTML = '<div class="empty">Lade Themen…</div>';
+  let threads = [];
+  try { threads = await self.DB.listThreads(forumCat); }
+  catch (e) { box.innerHTML = `<div class="empty">${escapeHtml(e.message||'Konnte Forum nicht laden. Wurde die neue SQL-Datei ausgeführt?')}</div>`; return; }
+  if (!threads.length) { box.innerHTML = '<div class="empty">Noch keine Themen in dieser Kategorie. Leg mit „+ Neues Thema" los.</div>'; return; }
+  box.innerHTML = threads.map(t=>{
+    const flag = countryFlag(t.author_country); const d = new Date(t.last_activity).toLocaleDateString('de-DE',{day:'2-digit',month:'short'});
+    return `<div class="collection-item" data-tid="${t.id}" style="cursor:pointer">
+      <div class="ci-main">
+        <div class="ci-name" data-act="open">${escapeHtml(t.title)}</div>
+        <div class="ci-sub">von ${flag?flag+' ':''}${escapeHtml(t.author_name||'Sammler')} · 💬 ${t.reply_count} · letzte Aktivität ${d}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+document.getElementById('forum-cats').addEventListener('click', e=>{
+  const chip = e.target.closest('.chip[data-cat]'); if (!chip) return;
+  document.querySelectorAll('#forum-cats .chip').forEach(c=>c.classList.toggle('active', c===chip));
+  forumCat = chip.dataset.cat; loadForum();
+});
+document.getElementById('forum-new-btn').addEventListener('click', ()=>renderThreadForm());
+function renderThreadForm() {
+  const box = document.getElementById('forum-body');
+  box.innerHTML = `<div class="an-card"><h3>Neues Thema in „${FORUM_CAT_LABEL[forumCat]}"</h3>
+    <div class="field"><label>Titel</label><input type="text" id="ft-title" maxlength="160" placeholder="Worum geht's?" /></div>
+    <div class="field" style="margin-top:8px"><label>Text</label><textarea id="ft-body" rows="6" maxlength="5000" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 13px;color:var(--text);font:inherit;resize:vertical"></textarea></div>
+    <div class="row" style="gap:8px;margin-top:10px"><button id="ft-save">Thema erstellen</button><button class="ghost" id="ft-cancel">Abbrechen</button></div>
+    <p class="msub" id="ft-status" style="min-height:1.2em;margin:6px 0 0"></p></div>`;
+  document.getElementById('ft-cancel').addEventListener('click', loadForum);
+  document.getElementById('ft-save').addEventListener('click', async ()=>{
+    const title = document.getElementById('ft-title').value.trim();
+    const body = document.getElementById('ft-body').value.trim();
+    const st = document.getElementById('ft-status');
+    if (!title || !body) { st.textContent = 'Bitte Titel und Text ausfüllen.'; return; }
+    st.textContent = 'Speichere…';
+    try { const t = await self.DB.createThread(forumCat, title, body); openThread(t.id); }
+    catch (err) { st.textContent = err.message || 'Konnte Thema nicht erstellen.'; }
+  });
+}
+document.getElementById('forum-body').addEventListener('click', e=>{
+  const item = e.target.closest('[data-tid]'); if (item && e.target.closest('[data-act="open"]')) { openThread(item.dataset.tid); }
+});
+async function openThread(id) {
+  const box = document.getElementById('forum-body');
+  box.innerHTML = '<div class="empty">Lade Thema…</div>';
+  await ensureMyUid();
+  let data;
+  try { data = await self.DB.getThread(id); } catch (e) { box.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; return; }
+  const t = data.thread; if (!t) { box.innerHTML = '<div class="empty">Thema nicht gefunden.</div>'; return; }
+  const post = (m, isOp) => {
+    const flag = countryFlag(m.author_country); const d = new Date(m.created_at).toLocaleString('de-DE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+    const mine = m.user_id === myUid;
+    const del = mine ? ` <span data-act="delpost" data-id="${m.id}" data-op="${isOp?1:0}" style="cursor:pointer;color:var(--muted)" title="Löschen">✕</span>` : '';
+    return `<div class="an-card" style="margin:0 0 10px">
+      <div class="ci-sub" style="margin-bottom:4px"><span data-act="pprofile" data-uid="${escapeHtml(m.user_id)}" style="cursor:pointer;border-bottom:1px dotted var(--muted)">${flag?flag+' ':''}<b>${escapeHtml(m.author_name||'Sammler')}</b></span> · ${d}${del}</div>
+      <div style="white-space:pre-wrap;word-break:break-word">${escapeHtml(m.body)}</div></div>`;
+  };
+  box.innerHTML = `<div class="row" style="margin-bottom:10px"><button class="ghost" id="ft-back">← Zurück</button><span class="ci-spacer"></span></div>
+    <h3 style="margin:0 0 4px">${escapeHtml(t.title)}</h3>
+    <div class="msub" style="margin-bottom:12px">${FORUM_CAT_LABEL[t.category]||t.category} · ${t.reply_count} Antworten</div>
+    ${post(t, true)}
+    <div id="thread-posts">${data.posts.map(p=>post(p,false)).join('')}</div>
+    <div class="an-card" style="margin:10px 0 0"><h3>Antworten</h3>
+      <textarea id="tp-body" rows="4" maxlength="5000" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 13px;color:var(--text);font:inherit;resize:vertical" placeholder="Deine Antwort…"></textarea>
+      <div class="row" style="gap:8px;margin-top:8px"><button id="tp-send">Antwort senden</button></div>
+      <p class="msub" id="tp-status" style="min-height:1.2em;margin:6px 0 0"></p></div>`;
+  document.getElementById('ft-back').addEventListener('click', loadForum);
+  document.getElementById('tp-send').addEventListener('click', async ()=>{
+    const body = document.getElementById('tp-body').value.trim(); const st = document.getElementById('tp-status');
+    if (!body) return; st.textContent = 'Sende…';
+    try { await self.DB.createPost(id, body); openThread(id); } catch (err) { st.textContent = err.message || 'Antwort fehlgeschlagen.'; }
+  });
+  box.querySelectorAll('[data-act="pprofile"]').forEach(el=>el.addEventListener('click', ()=>openProfile(el.dataset.uid)));
+  box.querySelectorAll('[data-act="delpost"]').forEach(el=>el.addEventListener('click', async ()=>{
+    if (!confirm(el.dataset.op==='1' ? 'Gesamtes Thema löschen?' : 'Antwort löschen?')) return;
+    try { if (el.dataset.op==='1') { await self.DB.deleteThread(id); loadForum(); } else { await self.DB.deletePost(el.dataset.id); openThread(id); } }
+    catch (err) { alert(err.message); }
+  }));
+}
 
 async function loadCommunity() {
   refreshUnread();
@@ -2853,6 +3125,7 @@ async function openProfile(userId) {
   document.getElementById('pf-bio').textContent = p.bio || '';
   document.getElementById('pf-contact').innerHTML = p.contact ? ('Kontakt: <b>' + escapeHtml(p.contact) + '</b>') : '<span class="msub">Keine Kontaktinfo hinterlegt.</span>';
   document.getElementById('pf-msg').style.display = p.is_me ? 'none' : '';
+  updateFriendButton(p);
   // Erfolge
   const ach = profileAchievements(p);
   var achHtml = ach.length ? `<div class="an-card" style="margin:0 0 12px"><h3>🏅 Erfolge</h3>${ach.map(a => `<span class="gchip" style="cursor:default">${escapeHtml(a)}</span>`).join('')}</div>` : '';
@@ -2879,6 +3152,32 @@ document.getElementById('pf-msg').addEventListener('click', () => {
   if (!profileUser) return;
   document.getElementById('profile-modal').classList.remove('open');
   openMsgModal(profileUser.user_id, profileUser.name, null);
+});
+// Freund-Button im Profil: Status aus dem Freunde-Cache ableiten.
+async function updateFriendButton(p) {
+  const btn = document.getElementById('pf-friend');
+  if (!btn) return;
+  if (p.is_me) { btn.style.display = 'none'; return; }
+  await ensureMyUid();
+  let rel = null;
+  try { rel = (await self.DB.listFriends()).find(f => f.otherId === p.user_id); } catch { btn.style.display='none'; return; }
+  btn.style.display = '';
+  btn.disabled = false;
+  if (!rel) { btn.textContent = '➕ Freund hinzufügen'; btn.dataset.mode = 'add'; btn.dataset.fid = ''; }
+  else if (rel.status === 'accepted') { btn.textContent = '✓ Befreundet – entfernen'; btn.dataset.mode = 'remove'; btn.dataset.fid = rel.id; }
+  else if (rel.incoming) { btn.textContent = '✓ Anfrage annehmen'; btn.dataset.mode = 'accept'; btn.dataset.fid = rel.id; }
+  else { btn.textContent = 'Anfrage gesendet – zurücknehmen'; btn.dataset.mode = 'cancel'; btn.dataset.fid = rel.id; }
+}
+document.getElementById('pf-friend').addEventListener('click', async () => {
+  if (!profileUser) return;
+  const btn = document.getElementById('pf-friend'); const mode = btn.dataset.mode; btn.disabled = true;
+  try {
+    if (mode === 'add') await self.DB.sendFriendRequest(profileUser.user_id);
+    else if (mode === 'accept') await self.DB.acceptFriend(btn.dataset.fid);
+    else await self.DB.removeFriend(btn.dataset.fid);
+    await updateFriendButton(profileUser);
+    if (document.getElementById('community-friends').style.display !== 'none') loadFriends();
+  } catch (err) { alert(err.message || 'Aktion fehlgeschlagen.'); btn.disabled = false; }
 });
 document.getElementById('pf-close').addEventListener('click', () => document.getElementById('profile-modal').classList.remove('open'));
 document.getElementById('profile-modal').addEventListener('click', e => { if (e.target.id === 'profile-modal') document.getElementById('profile-modal').classList.remove('open'); });
