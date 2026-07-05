@@ -479,9 +479,16 @@
     const cards = await loadOnePieceCards();
     let matches;
     if (mode === 'number') {
-      const setPart = (q.match(/[A-Za-z]{1,3}\d{1,2}/) || [])[0] || null;
-      const digitGroups = q.match(/\d{1,4}/g) || [];
-      const cardNum = digitGroups.length ? parseInt(digitGroups[digitGroups.length - 1], 10) : null;
+      // Set-Kuerzel + Kartennummer trennen. Das Kuerzel kann rein alphabetisch
+      // sein ("P" fuer Promos), Ziffern enthalten ("OP01","ST01","EB01","PRB01")
+      // und mit "-", Leerzeichen oder ohne Trennung stehen ("P-001","P 001","P001").
+      const raw = String(q || '').trim();
+      let setPart = null, numStr = null, m;
+      if ((m = raw.match(/^\s*([A-Za-z]{1,4}\d{0,3})\s*-\s*(\d{1,4})\s*$/))) { setPart = m[1]; numStr = m[2]; }
+      else if ((m = raw.match(/^\s*([A-Za-z]{1,4}\d{0,3})\s+(\d{1,4})\s*$/))) { setPart = m[1]; numStr = m[2]; }
+      else if ((m = raw.match(/^\s*([A-Za-z]+)(\d{1,4})\s*$/))) { setPart = m[1]; numStr = m[2]; }
+      if (!setPart) { const g = raw.match(/\d{1,4}/g) || []; numStr = g.length ? g[g.length - 1] : null; }
+      const cardNum = numStr != null ? parseInt(numStr, 10) : null;
       if (cardNum == null) return [];
       matches = cards.filter((c) => {
         const parts = String(c.card_set_id || '').split('-');
