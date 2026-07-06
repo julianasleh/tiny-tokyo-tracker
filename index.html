@@ -474,6 +474,9 @@
   .dt-comment { padding:10px 12px; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-sm); margin-bottom:8px; }
   .dt-comment .dc-head { font-size:.78rem; color:var(--muted); margin-bottom:3px; }
   .dt-comment .dc-body { white-space:pre-wrap; word-break:break-word; font-size:.9rem; }
+  #coll-overview { margin:6px 0 16px; }
+  #coll-overview .home-sec { margin:18px 0; }
+  #coll-overview .home-sec:first-child { margin-top:6px; }
 </style>
 </head>
 <body>
@@ -658,6 +661,8 @@
       <div id="chart-area"></div>
       <div class="chart-info" id="chart-info"></div>
     </div>
+
+    <div id="coll-overview"></div>
 
     <div class="filterbar row" id="collection-filters">
       <div class="row" id="game-chips">
@@ -2278,6 +2283,43 @@ async function loadCollection() {
   try { portfolioData = await (await fetch('api/portfolio')).json(); } catch { portfolioData = null; }
   buildCollectionLangFilter();
   renderCollection();
+  renderCollectionOverview();
+}
+function renderCollectionOverview() {
+  const box = document.getElementById('coll-overview'); if (!box) return;
+  const owned = (collectionCards || []).filter(c => c.status !== 'sold');
+  if (!owned.length) { box.innerHTML = ''; return; }
+  const val = c => (c.price_current ?? c.price_at_add ?? 0) * (c.quantity || 1);
+  const totalQty = owned.reduce((s, c) => s + (c.quantity || 1), 0);
+  const eur = owned.filter(c => (c.currency || 'EUR') !== 'USD');
+  const usd = owned.filter(c => (c.currency || 'EUR') === 'USD');
+  const eurVal = eur.reduce((s, c) => s + val(c), 0);
+  const usdVal = usd.reduce((s, c) => s + val(c), 0);
+  const eurQty = eur.reduce((s, c) => s + (c.quantity || 1), 0);
+  const avg = eurQty ? eurVal / eurQty : 0;
+  const top = [...owned].sort((a, b) => val(b) - val(a));
+  const favs = owned.filter(c => c.favorite);
+  const groupCount = keyFn => { const m = new Map(); for (const c of owned) { const k = keyFn(c) || '—'; m.set(k, (m.get(k) || 0) + (c.quantity || 1)); } return [...m.entries()].map(([key, n]) => ({ key, n })).sort((a, b) => b.n - a.n); };
+  const bySet = groupCount(c => c.set_name).slice(0, 8);
+  const byGame = groupCount(c => GAME_LABEL[c.game] || c.game);
+  const byRarity = groupCount(c => c.rarity).slice(0, 6);
+  const mx = a => Math.max(1, ...a.map(x => x.n));
+  const bar = (label, n, max) => `<div class="bar-row"><span class="lab">${escapeHtml(String(label))}</span><div class="bar-track"><div class="bar-fill" style="width:${Math.round(n / max * 100)}%"></div></div><span class="bar-val">${n}</span></div>`;
+  const mini = c => `<div class="mini-card" data-id="${c.id}">${c.favorite ? '<span class="mpl-flag" style="left:9px;right:auto;color:var(--gold)">★</span>' : ''}${c.image_url ? `<img src="${c.image_url}" loading="lazy" alt=""/>` : '<div class="mc-ph">🃏</div>'}<div class="mc-body"><div class="mc-name" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</div><div class="mc-sub">${escapeHtml(c.set_name || '')}</div><div class="mc-price">${fmt(val(c), c.currency || 'EUR')}</div></div></div>`;
+  box.innerHTML = `
+    <div class="an-grid">
+      <div class="stat"><div class="k">Karten</div><div class="v">${totalQty}</div><div class="sub">${owned.length} Unikate</div></div>
+      <div class="stat"><div class="k">Gesamtwert</div><div class="v">${fmt(eurVal, 'EUR')}</div>${usdVal > 0 ? `<div class="sub">+ ${fmt(usdVal, 'USD')} (One Piece)</div>` : ''}</div>
+      <div class="stat"><div class="k">Ø Wert / Karte</div><div class="v">${fmt(avg, 'EUR')}</div></div>
+      <div class="stat"><div class="k">Wertvollste</div><div class="v" style="font-size:1rem;line-height:1.2">${top[0] ? escapeHtml(top[0].name) : '—'}</div><div class="sub">${top[0] ? fmt(val(top[0]), top[0].currency || 'EUR') : ''}</div></div>
+    </div>
+    ${favs.length ? `<div class="home-sec"><div class="home-sec-h"><h3>⭐ Lieblingskarten</h3><span class="home-sec-note">${favs.length} markiert</span></div><div class="home-scroller">${favs.map(mini).join('')}</div></div>` : `<div class="home-sec"><p class="msub">Tipp: markiere Karten mit dem ☆ in der Liste, dann erscheinen sie hier als deine Lieblingskarten.</p></div>`}
+    <div class="home-sec"><div class="home-sec-h"><h3>💎 Wertvollste Karten</h3><span class="home-sec-note">Showcase deiner Sammlung</span></div><div class="home-scroller">${top.slice(0, 12).map(mini).join('')}</div></div>
+    <div class="mv-cols">
+      <div class="an-card"><h3>📚 Sammlung nach Set</h3>${bySet.length ? bySet.map(x => bar(x.key, x.n, mx(bySet))).join('') : '<span class="msub">—</span>'}</div>
+      <div class="an-card"><h3>🎴 Nach Spiel &amp; Seltenheit</h3>${byGame.map(x => bar(x.key, x.n, mx(byGame))).join('')}<div style="height:10px"></div>${byRarity.map(x => bar(x.key, x.n, mx(byRarity))).join('')}</div>
+    </div>`;
+  box.querySelectorAll('.mini-card').forEach(mc => mc.addEventListener('click', () => { const c = collectionCards.find(x => x.id === Number(mc.dataset.id)); if (c) openDetail(c, { histId: c.id }); }));
 }
 
 // Sprachfilter der Sammlung mit den tatsächlich vorhandenen Sprachen füllen
@@ -2416,6 +2458,7 @@ function renderCollectionItem(c) {
         ${badge}
         ${subs.length?`<div class="ci-subprice">${subs.join(' · ')}</div>`:''}
       </div>
+      ${sold?'':`<button class="ci-edit" data-act="fav" title="Als Lieblingskarte markieren" style="${c.favorite?'color:var(--gold)':''}">${c.favorite?'★':'☆'}</button>`}
       <button class="ci-edit" data-act="edit" title="Bearbeiten (Kaufpreis, verkauft…)">✎</button>
       <button class="ci-del" data-act="del" title="Entfernen">✕</button>
     </div>`;
@@ -4378,6 +4421,7 @@ document.getElementById('collection').addEventListener('click', e=>{
       } });
     });
   }
+  else if (act==='fav') patchCard(id,{favorite:!card.favorite});
   else if (act==='price') editPrice(item, card);
   else if (act==='edit') openEditModal(card);
   else if (act==='detail') openDetail(card, { histId:id });

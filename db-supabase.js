@@ -101,7 +101,7 @@
 
   async function updateCard(id, fields) {
     const allowed = ['quantity', 'condition', 'language', 'notes', 'price_current', 'price_low', 'price_trend',
-      'currency', 'purchase_price', 'purchase_date', 'status', 'sold_price', 'sold_date', 'for_sale', 'asking_price'];
+      'currency', 'purchase_price', 'purchase_date', 'status', 'sold_price', 'sold_date', 'for_sale', 'asking_price', 'favorite'];
     const patch = {};
     for (const k of allowed) if (fields[k] !== undefined) patch[k] = fields[k];
     if (!Object.keys(patch).length) {
