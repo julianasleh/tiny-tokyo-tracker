@@ -492,13 +492,27 @@
   .pf-banner { height:92px; border-radius:var(--r); background:linear-gradient(120deg,var(--accent),var(--accent-2)); }
   .pf-head { display:flex; align-items:flex-end; gap:14px; margin:-42px 0 10px; padding:0 2px; }
   .pf-avatar { width:76px; height:76px; border-radius:20px; border:3px solid var(--surface); background:var(--surface-2); display:flex; align-items:center; justify-content:center; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:1.7rem; color:var(--accent); flex-shrink:0; box-shadow:var(--shadow); }
-  .pf-head-main { padding-bottom:6px; min-width:0; }
-  .pf-head-main h3 { margin:0; font-size:1.4rem; }
+  .pf-head-main { padding-bottom:8px; min-width:0; }
+  .pf-head-main h3 { margin:0 0 5px; font-size:1.4rem; line-height:1.15; }
+  .pf-head-main .msub { line-height:1.55; }
   .pf-xp { margin:2px 0 14px; }
   .pf-xp-label { display:flex; justify-content:space-between; font-size:.76rem; color:var(--muted); margin-bottom:5px; }
   .pf-xp-bar { height:10px; background:var(--surface-2); border-radius:999px; overflow:hidden; }
   .pf-xp-fill { height:100%; background:linear-gradient(90deg,var(--accent),var(--accent-2)); border-radius:999px; }
   .pf-sec-h { font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:.95rem; margin:16px 0 10px; } .pf-sec-h small{ color:var(--muted); font-weight:400; }
+  /* ===== Sammler-Pass (Phase 8/9) ===== */
+  .pass-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); padding:18px 20px; box-shadow:var(--shadow-sm); }
+  .pass-break { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0; }
+  .pass-b { background:var(--surface-2); border:1px solid var(--border); border-radius:999px; padding:4px 11px; font-size:.78rem; color:var(--muted); } .pass-b b{ color:var(--gold); }
+  .pass-cols { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:6px; }
+  @media(max-width:640px){ .pass-cols{ grid-template-columns:1fr; } }
+  .pass-h { font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:.9rem; margin:0 0 8px; }
+  .pass-chal { display:flex; align-items:center; gap:8px; padding:9px 12px; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-sm); margin-bottom:7px; font-size:.85rem; }
+  .pass-chal.done { border-color:var(--pos); color:var(--pos); }
+  .pass-chal-n { font-variant-numeric:tabular-nums; color:var(--muted); }
+  .pass-badges { display:flex; flex-wrap:wrap; gap:7px; }
+  .pass-badge { background:var(--surface-2); border:1px solid var(--border); border-radius:999px; padding:5px 11px; font-size:.76rem; color:var(--muted); } .pass-badge small{ opacity:.8; }
+  .pass-badge.on { background:var(--gold-weak); color:var(--gold); border-color:transparent; font-weight:600; }
 </style>
 </head>
 <body>
@@ -576,6 +590,7 @@
       <p class="msub" id="db-pricenote" style="margin:6px 0 0"></p>
     </div>
     <div class="an-card" id="db-quests" style="display:none"></div>
+    <div id="home-pass"></div>
 
     <div class="home-sec" id="sec-trending" style="display:none">
       <div class="home-sec-h"><h3>📈 Im Trend</h3><span class="home-sec-note">deine größten Wertsteigerungen · 30 Tage</span></div>
@@ -1898,7 +1913,7 @@ async function loadDashboard() {
     if (hv && tot != null && tot > 0) hv.innerHTML = `<div class="hh-value-label">Sammlungswert</div><div class="hh-value-num">${fmt(tot,'EUR')}</div>`;
     renderReco((m && m.items) || [], (w && w.items) || []);
   } catch { el.innerHTML = ''; }
-  loadTrendingHome(); loadReleasesHome(); loadFeedHome(); loadSellersHome();
+  loadTrendingHome(); loadReleasesHome(); loadFeedHome(); loadSellersHome(); renderPass();
 }
 
 function homeMiniCard(o) {
@@ -3767,6 +3782,54 @@ function levelProgress(points) {
   const pct = nextT != null ? Math.min(100, Math.round(into / span * 100)) : 100;
   return { n: idx + 1, name: LEVELS[idx][1], cur, next: nextT, into, span, pct };
 }
+function communityXp(posts) {
+  const n = (posts || []).length;
+  const guides = (posts || []).filter(p => p.kind === 'guide').length;
+  const reviews = (posts || []).filter(p => p.kind === 'review').length;
+  return Math.min(n, 60) * 25 + guides * 30 + reviews * 20;
+}
+function renderProfileActivity(posts) {
+  const box = document.getElementById('pf-activity'); if (!box) return; box.innerHTML = '';
+  const mine = (posts || []).slice(0, 4); if (!mine.length) return;
+  box.innerHTML = `<div class="pf-sec-h">📣 Aktivität</div>` + mine.map(p => { const k = (typeof POST_KINDS !== 'undefined' && POST_KINDS[p.kind]) || ['📌', p.kind]; const d = new Date(p.last_activity).toLocaleDateString('de-DE', { day:'2-digit', month:'short' }); return `<div class="feed-item" data-pid="${p.id}"><span class="fi-ic">${k[0]}</span><div class="fi-body"><div class="fi-title">${escapeHtml(p.title)}</div><div class="fi-sub">${escapeHtml(k[1])} · ❤ ${p.like_count||0} · 💬 ${p.comment_count||0} · ${d}</div></div></div>`; }).join('');
+  box.querySelectorAll('[data-pid]').forEach(el => el.addEventListener('click', () => { document.getElementById('profile-modal').classList.remove('open'); openPostDetail(el.dataset.pid); }));
+}
+async function renderPass() {
+  const box = document.getElementById('home-pass'); if (!box) return;
+  await ensureMyUid().catch(()=>{});
+  let cards = [], wishN = 0, posts = [], points = 0, rank = null;
+  try { const d = await (await fetch('api/collection')).json(); cards = d.cards || []; } catch {}
+  try { const w = await (await fetch('api/wishlist')).json(); wishN = (w.items || []).length; } catch {}
+  try { if (self.DB.listPosts && myUid) posts = (await self.DB.listPosts()).filter(p => p.user_id === myUid); } catch {}
+  try { const s = await self.DB.getSession(); if (s && s.user) { const pr = await (await fetch('api/profile/' + s.user.id)).json(); if (pr.profile) { points = pr.profile.points || 0; rank = pr.profile.rank; } } } catch {}
+  const owned = cards.filter(c => c.status !== 'sold'), sold = cards.filter(c => c.status === 'sold');
+  const forSale = owned.filter(c => c.for_sale).length;
+  const cxp = communityXp(posts);
+  const total = points + cxp;
+  const lp = levelProgress(total);
+  const parts = [['📚 Sammlung', Math.min(owned.length, 400) * 10], ['💰 Verkäufe', sold.length * 50], ['🛒 Angebote', forSale * 25], ['📝 Wunschliste', Math.min(wishN, 200) * 5], ['💬 Community', cxp]].filter(x => x[1] > 0);
+  const mon = new Date(); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7)); mon.setHours(0, 0, 0, 0);
+  const wk = d => d && new Date(d) >= mon;
+  const addedW = owned.filter(c => wk(c.added_at)).length;
+  const soldW = sold.filter(c => wk(c.sold_date)).length;
+  const postsW = posts.filter(p => wk(p.created_at)).length;
+  const chal = [['➕ 3 Karten hinzufügen', addedW, 3], ['💬 2 Beiträge schreiben', postsW, 2], ['💰 1 Karte verkaufen', soldW, 1]];
+  const badges = [['🛒','100 Verkäufe', sold.length, 100], ['🏆','Top Seller', (rank != null && rank <= 3) ? 1 : 0, 1], ['📚','Sammler 100', owned.length, 100], ['📚','Sammler 500', owned.length, 500], ['📖','Guide-Autor', posts.filter(p => p.kind === 'guide').length, 1], ['⭐','Reviewer', posts.filter(p => p.kind === 'review').length, 3], ['🤝','Helpful Member', posts.length, 5]];
+  const chalBar = (t, n, m) => `<div class="pass-chal ${n >= m ? 'done' : ''}"><span>${n >= m ? '✓ ' : ''}${t}</span><span class="ci-spacer"></span><span class="pass-chal-n">${Math.min(n, m)}/${m}</span></div>`;
+  const badgeChip = (ic, name, n, m) => `<span class="pass-badge ${n >= m ? 'on' : ''}" title="${n >= m ? 'Erreicht' : Math.min(n, m) + ' / ' + m}">${ic} ${escapeHtml(name)}${n >= m ? '' : ` <small>${Math.min(n, m)}/${m}</small>`}</span>`;
+  box.innerHTML = `
+    <div class="home-sec"><div class="home-sec-h"><h3>🎖️ Sammler-Pass</h3><span class="home-sec-note">Level ${lp.n} · ${escapeHtml(lp.name)}</span></div>
+      <div class="pass-card">
+        <div class="pf-xp-label"><span>Level ${lp.n} · ${escapeHtml(lp.name)}</span><span>${lp.next != null ? `${lp.into} / ${lp.span} XP` : 'Max-Level'}</span></div>
+        <div class="pf-xp-bar" style="margin-bottom:14px"><div class="pf-xp-fill" style="width:${lp.pct}%"></div></div>
+        <div class="pass-break">${parts.map(x => `<span class="pass-b">${x[0]} <b>${x[1]}</b></span>`).join('')}</div>
+        <div class="pass-cols">
+          <div><div class="pass-h">🎯 Diese Woche</div>${chal.map(c => chalBar(c[0], c[1], c[2])).join('')}</div>
+          <div><div class="pass-h">🏅 Badges</div><div class="pass-badges">${badges.map(b => badgeChip(b[0], b[1], b[2], b[3])).join('')}</div></div>
+        </div>
+      </div>
+    </div>`;
+}
 async function loadProfileHighlights(userId) {
   const box = document.getElementById('pf-highlights'); if (!box) return; box.innerHTML = '';
   try {
@@ -3835,10 +3898,12 @@ async function openProfile(userId) {
   } catch { document.getElementById('pf-name').textContent = 'Profil'; document.getElementById('pf-meta').textContent = 'Fehler beim Laden.'; return; }
   const p = d.profile;
   profileUser = p;
+  let _upoints = p.points || 0, _uposts = [];
+  try { if (self.DB.listPosts) { _uposts = (await self.DB.listPosts()).filter(x => x.user_id === userId); _upoints += communityXp(_uposts); } } catch {}
   const flag = countryFlag(p.country);
   document.getElementById('pf-name').textContent = `${flag ? flag + ' ' : ''}${p.name || 'Sammler'}`;
   const meta = [];
-  const lv = levelFor(p.points);
+  const lv = levelFor(_upoints);
   meta.push(`Lv. ${lv.n} · ${lv.name}`);
   if (p.fb_count) meta.push(`★ ${Number(p.fb_avg).toFixed(2)} · ${p.fb_count} Feedback`);
   else meta.push('Noch kein Trade-Feedback');
@@ -3850,9 +3915,9 @@ async function openProfile(userId) {
   const _fg = p.fav_games ? p.fav_games.split(',')[0].trim() : '';
   const _bnr = document.getElementById('pf-banner'); if (_bnr) _bnr.style.background = `linear-gradient(120deg, ${_gcol[_fg]||'var(--accent)'}, var(--accent-2))`;
   const _av = document.getElementById('pf-avatar'); if (_av) _av.textContent = ((p.name||'S').trim().split(/\s+/).map(w=>w[0]||'').join('').slice(0,2).toUpperCase()) || 'S';
-  const _lp = levelProgress(p.points); const _xp = document.getElementById('pf-xp');
+  const _lp = levelProgress(_upoints); const _xp = document.getElementById('pf-xp');
   if (_xp) _xp.innerHTML = `<div class="pf-xp-label"><span>Level ${_lp.n} · ${escapeHtml(_lp.name)}</span><span>${_lp.next!=null?`${_lp.into} / ${_lp.span} XP`:'Max-Level'}</span></div><div class="pf-xp-bar"><div class="pf-xp-fill" style="width:${_lp.pct}%"></div></div>`;
-  loadProfileHighlights(userId); loadProfileActivity(userId);
+  loadProfileHighlights(userId); renderProfileActivity(_uposts);
   // Vertrauensindikatoren (nur zeigen, was wirklich zutrifft)
   const ind = [];
   if (p.email_verified) ind.push('🟢 E-Mail-Adresse bestätigt');
