@@ -488,6 +488,17 @@
   .pc-sub { color:var(--muted); font-size:.76rem; margin-top:5px; }
   .pc-meta { display:flex; gap:16px; margin-top:11px; color:var(--muted); font-size:.84rem; }
   .pc-like { cursor:pointer; } .pc-like.on { color:var(--neg); }
+  /* ===== Steam-artiges Profil (Phase 7) ===== */
+  .pf-banner { height:92px; border-radius:var(--r); background:linear-gradient(120deg,var(--accent),var(--accent-2)); }
+  .pf-head { display:flex; align-items:flex-end; gap:14px; margin:-42px 0 10px; padding:0 2px; }
+  .pf-avatar { width:76px; height:76px; border-radius:20px; border:3px solid var(--surface); background:var(--surface-2); display:flex; align-items:center; justify-content:center; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:1.7rem; color:var(--accent); flex-shrink:0; box-shadow:var(--shadow); }
+  .pf-head-main { padding-bottom:6px; min-width:0; }
+  .pf-head-main h3 { margin:0; font-size:1.4rem; }
+  .pf-xp { margin:2px 0 14px; }
+  .pf-xp-label { display:flex; justify-content:space-between; font-size:.76rem; color:var(--muted); margin-bottom:5px; }
+  .pf-xp-bar { height:10px; background:var(--surface-2); border-radius:999px; overflow:hidden; }
+  .pf-xp-fill { height:100%; background:linear-gradient(90deg,var(--accent),var(--accent-2)); border-radius:999px; }
+  .pf-sec-h { font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:.95rem; margin:16px 0 10px; } .pf-sec-h small{ color:var(--muted); font-weight:400; }
 </style>
 </head>
 <body>
@@ -878,10 +889,10 @@
     </div>
     <div class="filterbar row">
       <div class="row" id="cm-tabs">
-        <button class="chip active" data-tab="freunde">Freunde <span class="count" id="cm-friends-tab"></span></button>
+        <button class="chip active" data-tab="beitraege">Beiträge</button>
+        <button class="chip" data-tab="freunde">Freunde <span class="count" id="cm-friends-tab"></span></button>
         <button class="chip" data-tab="chat">Chat</button>
         <button class="chip" data-tab="forum">Forum</button>
-        <button class="chip" data-tab="beitraege">Beiträge</button>
         <button class="chip" data-tab="postfach">Postfach <span class="count" id="cm-unread-tab"></span></button>
         <button class="chip" data-tab="rangliste">Rangliste</button>
       </div>
@@ -1329,11 +1340,14 @@
 <div class="modal-bg" id="profile-modal">
   <div class="modal" style="max-width:540px;position:relative">
     <button class="detail-close" id="pf-close" title="Schließen">✕</button>
-    <h3 id="pf-name">Profil</h3>
-    <div class="msub" id="pf-meta"></div>
+    <div class="pf-banner" id="pf-banner"></div>
+    <div class="pf-head"><div class="pf-avatar" id="pf-avatar"></div><div class="pf-head-main"><h3 id="pf-name">Profil</h3><div class="msub" id="pf-meta"></div></div></div>
+    <div id="pf-xp"></div>
     <div id="pf-badges" style="margin:4px 0 8px"></div>
     <div id="pf-indicators" class="msub" style="margin:0 0 12px;line-height:1.9"></div>
     <div class="an-grid" id="pf-stats" style="margin-bottom:10px"></div>
+    <div id="pf-highlights"></div>
+    <div id="pf-activity"></div>
     <p id="pf-bio" class="msub" style="white-space:pre-wrap;margin:0 0 8px"></p>
     <div class="msub" id="pf-contact" style="margin-bottom:10px"></div>
     <div class="row" style="gap:8px;margin-bottom:12px">
@@ -2033,7 +2047,7 @@ function route() {
   if (target==='verkauft') loadSold();
   if (target==='analyse') { recordOpenSnapshot().then(loadAnalyse); }
   if (target==='graded') loadGraded();
-  if (target==='community') { cmShowTab('freunde'); }
+  if (target==='community') { cmShowTab('beitraege'); }
   if (target==='marktplatz') { mpShowTab('angebote'); }
   if (target==='einstellungen') { loadCommunityProfile(); setShowTab('profil'); }
 }
@@ -3742,6 +3756,38 @@ function levelFor(points) {
   LEVELS.forEach((l, i) => { if ((points || 0) >= l[0]) idx = i; });
   return { n: idx + 1, name: LEVELS[idx][1] };
 }
+function levelProgress(points) {
+  const pts = points || 0;
+  let idx = 0;
+  LEVELS.forEach((l, i) => { if (pts >= l[0]) idx = i; });
+  const cur = LEVELS[idx][0];
+  const nextT = idx + 1 < LEVELS.length ? LEVELS[idx + 1][0] : null;
+  const into = pts - cur;
+  const span = nextT != null ? nextT - cur : 0;
+  const pct = nextT != null ? Math.min(100, Math.round(into / span * 100)) : 100;
+  return { n: idx + 1, name: LEVELS[idx][1], cur, next: nextT, into, span, pct };
+}
+async function loadProfileHighlights(userId) {
+  const box = document.getElementById('pf-highlights'); if (!box) return; box.innerHTML = '';
+  try {
+    const d = await (await fetch('api/market')).json();
+    const offers = (d.items || []).filter(x => x.seller_id === userId).slice(0, 12);
+    if (!offers.length) return;
+    box.innerHTML = `<div class="pf-sec-h">🃏 Sammlungs-Highlights <small>(${offers.length} im Angebot)</small></div><div class="home-scroller">${offers.map(c => { const cur = c.currency || 'EUR'; const price = c.asking_price != null ? fmt(c.asking_price, cur) : (c.price_current != null ? fmt(c.price_current, cur) : ''); return `<div class="mini-card" data-cid="${c.id}">${c.image_url ? `<img src="${c.image_url}" loading="lazy" alt=""/>` : '<div class="mc-ph">🃏</div>'}<div class="mc-body"><div class="mc-name" title="${escapeHtml(c.name || '')}">${escapeHtml(c.name || '')}</div><div class="mc-sub">${escapeHtml(c.set_name || '')}</div><div class="mc-price">${price}</div></div></div>`; }).join('')}</div>`;
+    box.querySelectorAll('.mini-card').forEach(mc => mc.addEventListener('click', () => { const c = offers.find(x => String(x.id) === mc.dataset.cid); if (c) { document.getElementById('profile-modal').classList.remove('open'); openListingModal(c); } }));
+  } catch {}
+}
+async function loadProfileActivity(userId) {
+  const box = document.getElementById('pf-activity'); if (!box) return; box.innerHTML = '';
+  try {
+    if (!self.DB.listPosts) return;
+    const all = await self.DB.listPosts();
+    const mine = all.filter(x => x.user_id === userId).slice(0, 4);
+    if (!mine.length) return;
+    box.innerHTML = `<div class="pf-sec-h">📣 Aktivität</div>` + mine.map(p => { const k = (typeof POST_KINDS !== 'undefined' && POST_KINDS[p.kind]) || ['📌', p.kind]; const d = new Date(p.last_activity).toLocaleDateString('de-DE', { day: '2-digit', month: 'short' }); return `<div class="feed-item" data-pid="${p.id}"><span class="fi-ic">${k[0]}</span><div class="fi-body"><div class="fi-title">${escapeHtml(p.title)}</div><div class="fi-sub">${escapeHtml(k[1])} · ❤ ${p.like_count || 0} · 💬 ${p.comment_count || 0} · ${d}</div></div></div>`; }).join('');
+    box.querySelectorAll('[data-pid]').forEach(el => el.addEventListener('click', () => { document.getElementById('profile-modal').classList.remove('open'); openPostDetail(el.dataset.pid); }));
+  } catch {}
+}
 const COLLECTOR_TYPES = ['Casual','Sammler','Competitive','Investor','Händler','Tauscher'];
 // Abzeichen = manuell vergebene (aus der Datenbank, z. B. "verified")
 // + automatisch verdiente (aus den Statistiken berechnet).
@@ -3778,7 +3824,7 @@ async function openProfile(userId) {
   if (!userId) return;
   document.getElementById('profile-modal').classList.add('open');
   document.getElementById('pf-name').textContent = 'Lade Profil…';
-  ['pf-meta','pf-badges','pf-stats','pf-bio','pf-contact','pf-fb-summary','pf-ratings'].forEach(id => { document.getElementById(id).innerHTML = ''; });
+  ['pf-meta','pf-badges','pf-stats','pf-bio','pf-contact','pf-fb-summary','pf-ratings','pf-xp','pf-highlights','pf-activity'].forEach(id => { const e=document.getElementById(id); if(e) e.innerHTML=''; });
   document.getElementById('pf-msg').style.display = 'none';
   let d, fb = [];
   try {
@@ -3800,6 +3846,13 @@ async function openProfile(userId) {
   if (p.fav_games) meta.push((p.fav_games.split(',').map(g => GAME_LABEL[g.trim()] || g.trim()).join(', ')));
   if (p.member_since) meta.push('Dabei seit ' + new Date(p.member_since).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }));
   document.getElementById('pf-meta').textContent = meta.join('  ·  ');
+  const _gcol = { pokemon:'var(--pokemon)', magic:'var(--magic)', yugioh:'var(--yugioh)', onepiece:'var(--onepiece)' };
+  const _fg = p.fav_games ? p.fav_games.split(',')[0].trim() : '';
+  const _bnr = document.getElementById('pf-banner'); if (_bnr) _bnr.style.background = `linear-gradient(120deg, ${_gcol[_fg]||'var(--accent)'}, var(--accent-2))`;
+  const _av = document.getElementById('pf-avatar'); if (_av) _av.textContent = ((p.name||'S').trim().split(/\s+/).map(w=>w[0]||'').join('').slice(0,2).toUpperCase()) || 'S';
+  const _lp = levelProgress(p.points); const _xp = document.getElementById('pf-xp');
+  if (_xp) _xp.innerHTML = `<div class="pf-xp-label"><span>Level ${_lp.n} · ${escapeHtml(_lp.name)}</span><span>${_lp.next!=null?`${_lp.into} / ${_lp.span} XP`:'Max-Level'}</span></div><div class="pf-xp-bar"><div class="pf-xp-fill" style="width:${_lp.pct}%"></div></div>`;
+  loadProfileHighlights(userId); loadProfileActivity(userId);
   // Vertrauensindikatoren (nur zeigen, was wirklich zutrifft)
   const ind = [];
   if (p.email_verified) ind.push('🟢 E-Mail-Adresse bestätigt');
