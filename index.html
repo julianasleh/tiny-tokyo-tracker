@@ -497,7 +497,6 @@
       <a href="#/dashboard" data-view="dashboard">Start</a>
       <a href="#/suche" data-view="suche">Suche</a>
       <a href="#/sammlung" data-view="sammlung">Sammlung <span class="count" id="nav-count"></span></a>
-      <a href="#/wunschliste" data-view="wunschliste">Wunschliste <span class="count" id="wish-count"></span></a>
       <a href="#/marktplatz" data-view="marktplatz">Marktplatz</a>
       <a href="#/analyse" data-view="analyse">Analyse</a>
       <a href="#/community" data-view="community">Community <span class="count" id="cm-nav-unread"></span></a>
@@ -511,6 +510,7 @@
     <a href="#/versiegelt" data-sub="versiegelt">Versiegelt <span class="count" id="sealed-count"></span></a>
     <a href="#/graded" data-sub="graded">Graded</a>
     <a href="#/verkauft" data-sub="verkauft">Verkauft <span class="count" id="sold-count"></span></a>
+    <a href="#/wunschliste" data-sub="wunschliste">Wunschliste <span class="count" id="wish-count"></span></a>
   </div>
 
   <!-- ============ DASHBOARD (Startseite) ============ -->
@@ -1943,7 +1943,7 @@ function route() {
   const target = ['dashboard','sammlung','wunschliste','versiegelt','verkauft','analyse','einstellungen','graded','community','marktplatz'].includes(view) ? view : (view === 'suche' ? 'suche' : 'dashboard');
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + target).classList.add('active');
-  const BESTAND = ['sammlung','versiegelt','graded','verkauft'];
+  const BESTAND = ['sammlung','versiegelt','graded','verkauft','wunschliste'];
   document.querySelectorAll('nav a').forEach(a => a.classList.toggle('active',
     a.dataset.view===target || (a.dataset.view==='sammlung' && BESTAND.includes(target))));
   const sub = document.getElementById('bestand-subnav');
@@ -2732,9 +2732,17 @@ function renderSeeking() {
   let list = seekingItems.filter(c => !mpSeekGame || c.game === mpSeekGame);
   if (mpSeekMine) list = list.filter(c => !c.is_mine && c.external_id && owned.has(c.game + '|' + c.external_id));
   const openCount = seekingItems.filter(c => !c.is_mine).length;
-  document.getElementById('mp-seek-tab').textContent = openCount || '';
-  if (!list.length) { el.innerHTML = '<div class="empty">Keine Gesuche gefunden.</div>'; return; }
-  el.innerHTML = list.map(c => {
+  const ownedMatches = seekingItems.filter(c => !c.is_mine && c.external_id && owned.has(c.game + '|' + c.external_id));
+  const tb = document.getElementById('mp-seek-tab');
+  if (ownedMatches.length) { tb.textContent = ownedMatches.length; tb.style.color = 'var(--pos)'; tb.title = ownedMatches.length + ' gesuchte Karten hast du in der Sammlung'; }
+  else { tb.textContent = openCount || ''; tb.style.color = ''; tb.title = ''; }
+  const banner = ownedMatches.length ? `<div class="filterbar row" style="border-color:var(--pos)">
+      <span>🎯 <b>${ownedMatches.length}</b> gesuchte Karte${ownedMatches.length===1?'':'n'} hast du in deiner Sammlung!</span>
+      <span class="ci-spacer"></span>
+      <button class="chip ${mpSeekMine?'active':''}" id="seek-mine-btn">${mpSeekMine?'alle zeigen':'nur diese zeigen'}</button>
+    </div>` : '';
+  if (!list.length) { el.innerHTML = banner + '<div class="empty">Keine Gesuche gefunden.</div>'; bindSeekMineBtn(); return; }
+  el.innerHTML = banner + list.map(c => {
     const cur = c.seek_currency || 'EUR';
     const ref = refText({ setCode: c.set_code, number: c.number });
     const cflag = countryFlag(c.seeker_country);
@@ -2753,6 +2761,11 @@ function renderSeeking() {
       ${(!c.is_mine && c.seeker_id) ? '<button class="wtocoll" data-act="offer" title="Dem Sucher anbieten / anschreiben">✉ Anbieten</button>' : ''}
     </div>`;
   }).join('');
+  bindSeekMineBtn();
+}
+function bindSeekMineBtn() {
+  const b = document.getElementById('seek-mine-btn');
+  if (b) b.addEventListener('click', () => { mpSeekMine = !mpSeekMine; const cb = document.getElementById('mp-seek-mine'); if (cb) cb.checked = mpSeekMine; renderSeeking(); });
 }
 document.getElementById('mp-seek-chips').addEventListener('click', e=>{
   const chip = e.target.closest('.chip[data-sg]'); if (!chip) return;
