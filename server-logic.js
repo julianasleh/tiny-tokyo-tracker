@@ -45,20 +45,28 @@
   }
 
   async function refreshPrices(rows, applyUpdate) {
+    // Parallel in mehreren "Workern" statt streng nacheinander -- das ist bei
+    // vielen Karten deutlich schneller. Die Begrenzung (CONCURRENCY) haelt die
+    // Last auf den Quell-APIs moderat; einzelne Fehler stoppen den Rest nicht.
     let updated = 0;
     const errors = [];
-    for (const r of rows) {
-      try {
-        const p = await A.fetchPrices(r.game, r.external_id);
-        if (p.price !== null || p.low !== null || p.trend !== null) {
-          await applyUpdate(r.id, p);
-          updated++;
+    const CONCURRENCY = 6;
+    let i = 0;
+    async function worker() {
+      while (i < rows.length) {
+        const r = rows[i++];
+        try {
+          const p = await A.fetchPrices(r.game, r.external_id);
+          if (p.price !== null || p.low !== null || p.trend !== null) {
+            await applyUpdate(r.id, p);
+            updated++;
+          }
+        } catch (e) {
+          errors.push({ id: r.id, name: r.name || r.external_id, error: String((e && e.message) || e) });
         }
-      } catch (e) {
-        errors.push({ id: r.id, name: r.name || r.external_id, error: String((e && e.message) || e) });
       }
-      await new Promise((res) => setTimeout(res, 120));
     }
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, rows.length) }, worker));
     return { updated, total: rows.length, errors };
   }
 
