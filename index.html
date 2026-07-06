@@ -377,6 +377,59 @@
   @media (max-width:400px) {
     .grid { grid-template-columns:repeat(auto-fill,minmax(145px,1fr)); }
   }
+  /* ===== Homepage ===== */
+  .home-hero { position:relative; overflow:hidden; border:1px solid var(--border); border-radius:var(--r-lg); padding:36px 34px; margin-bottom:22px; background:radial-gradient(130% 150% at 0% 0%, var(--accent-weak), transparent 58%), linear-gradient(135deg, var(--surface), var(--surface-2)); box-shadow:var(--shadow); display:flex; gap:20px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+  .hh-main { min-width:0; }
+  .hh-eyebrow { font-size:.76rem; text-transform:uppercase; letter-spacing:.14em; color:var(--accent); font-weight:700; }
+  .hh-title { font-family:'Space Grotesk',sans-serif; font-size:2.4rem; font-weight:700; letter-spacing:-.03em; margin:6px 0 4px; line-height:1.05; }
+  .hh-sub { color:var(--muted); margin:0 0 16px; font-size:1rem; }
+  .hh-actions { display:flex; gap:10px; flex-wrap:wrap; }
+  .hh-value { text-align:right; }
+  .hh-value-label { font-size:.72rem; text-transform:uppercase; letter-spacing:.12em; color:var(--muted); }
+  .hh-value-num { font-family:'Space Grotesk',sans-serif; font-size:2rem; font-weight:700; color:var(--gold); font-variant-numeric:tabular-nums; }
+  @media(max-width:640px){ .home-hero{ padding:24px 20px; } .hh-title{ font-size:1.85rem; } .hh-value{ text-align:left; width:100%; } }
+  .home-sec { margin:26px 0; }
+  .home-sec-h { display:flex; align-items:baseline; gap:12px; margin-bottom:14px; }
+  .home-sec-h h3 { font-family:'Space Grotesk',sans-serif; font-size:1.18rem; margin:0; }
+  .home-sec-h .home-sec-note { color:var(--muted); font-size:.82rem; }
+  .home-sec-h a { margin-left:auto; font-size:.85rem; font-weight:600; }
+  .home-two { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  @media(max-width:720px){ .home-two{ grid-template-columns:1fr; gap:0; } .home-two .home-sec{ margin:20px 0; } }
+  .home-scroller { display:grid; grid-auto-flow:column; grid-auto-columns:152px; gap:14px; overflow-x:auto; padding:4px 2px 12px; scroll-snap-type:x proximity; }
+  .home-scroller::-webkit-scrollbar{ height:8px; } .home-scroller::-webkit-scrollbar-thumb{ background:var(--border-strong); border-radius:8px; }
+  .mini-card { scroll-snap-align:start; background:var(--surface); border:1px solid var(--border); border-radius:var(--r); overflow:hidden; cursor:pointer; box-shadow:var(--shadow-sm); transition:transform var(--trans),box-shadow var(--trans),border-color var(--trans); }
+  .mini-card:hover { transform:translateY(-4px); box-shadow:var(--shadow-lg); border-color:var(--border-strong); }
+  .mini-card img, .mini-card .mc-ph { width:100%; aspect-ratio:5/7; object-fit:contain; background:#0a0c10; display:flex; align-items:center; justify-content:center; font-size:1.6rem; }
+  .mc-body { padding:9px 10px 11px; }
+  .mc-name { font-weight:600; font-size:.82rem; line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .mc-sub { color:var(--muted); font-size:.7rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .mc-price { color:var(--gold); font-weight:800; font-size:.86rem; margin-top:4px; font-variant-numeric:tabular-nums; }
+  .mc-delta { font-size:.7rem; font-weight:700; margin-left:2px; } .mc-delta.up{color:var(--pos);} .mc-delta.down{color:var(--neg);}
+  .rel-card { scroll-snap-align:start; background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:14px 12px; box-shadow:var(--shadow-sm); text-align:center; transition:transform var(--trans),border-color var(--trans); }
+  .rel-card:hover { transform:translateY(-3px); border-color:var(--border-strong); }
+  .rel-card img { width:100%; height:52px; object-fit:contain; margin-bottom:8px; }
+  .rel-ph { height:52px; display:flex; align-items:center; justify-content:center; color:var(--muted); font-weight:700; margin-bottom:8px; }
+  .rel-name { font-weight:600; font-size:.8rem; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rel-sub { color:var(--muted); font-size:.7rem; margin-top:2px; }
+  .feed-item { display:flex; gap:11px; align-items:flex-start; padding:11px 13px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r); margin-bottom:8px; cursor:pointer; transition:border-color var(--trans); }
+  .feed-item:hover { border-color:var(--accent); }
+  .fi-ic { font-size:1.1rem; } .fi-body{ min-width:0; } .fi-title{ font-weight:600; font-size:.88rem; } .fi-sub{ color:var(--muted); font-size:.74rem; margin-top:2px; }
+  .seller-row { display:flex; align-items:center; gap:11px; padding:10px 13px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r); margin-bottom:8px; cursor:pointer; transition:border-color var(--trans); }
+  .seller-row:hover { border-color:var(--accent); }
+  .sr-rank { width:26px; height:26px; flex-shrink:0; display:flex; align-items:center; justify-content:center; border-radius:50%; background:var(--surface-2); border:1px solid var(--border); font-weight:700; font-size:.8rem; color:var(--muted); }
+  .sr-rank.top { background:var(--gold-weak); color:var(--gold); border-color:transparent; }
+  .sr-name { font-weight:600; font-size:.9rem; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .sr-name small{ color:var(--muted); font-weight:400; }
+  .sr-pts { color:var(--gold); font-weight:700; font-variant-numeric:tabular-nums; }
+  .home-footer { margin-top:40px; padding-top:24px; border-top:1px solid var(--border); }
+  .foot-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:24px; }
+  .foot-col h4 { font-size:.74rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:0 0 8px; }
+  .foot-col p { color:var(--text); font-size:.86rem; margin:0 0 6px; line-height:1.6; }
+  .foot-col .muted { color:var(--muted); }
+  .foot-brand { font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:1.05rem; margin-bottom:6px; }
+  .foot-hours-row { display:flex; justify-content:space-between; gap:12px; font-size:.84rem; padding:2px 0; }
+  .foot-hours-row .muted { color:var(--muted); }
+  .foot-news { margin:0; padding-left:16px; color:var(--muted); font-size:.84rem; } .foot-news li{ margin:3px 0; }
+  .foot-legal { margin-top:22px; padding-top:16px; border-top:1px solid var(--border); text-align:center; color:var(--muted); font-size:.82rem; }
 </style>
 </head>
 <body>
@@ -434,23 +487,54 @@
 
   <!-- ============ DASHBOARD (Startseite) ============ -->
   <section class="view" id="view-dashboard">
-    <div class="hero">
-      <div>
-        <div class="label">Willkommen bei</div>
-        <div class="value" style="font-size:1.9rem">⛩ Tiny Tokyo Tracker</div>
-        <div class="breakdown">Sammlung verwalten · Preise verfolgen · mit der Community handeln</div>
+    <div class="home-hero">
+      <div class="hh-main">
+        <div class="hh-eyebrow" id="hh-eyebrow">Willkommen bei</div>
+        <h1 class="hh-title" id="hh-title">Tiny Tokyo Tracker</h1>
+        <p class="hh-sub">Deine Karten, dein Wert, deine Community – an einem Ort.</p>
+        <div class="hh-actions">
+          <button onclick="location.hash='#/suche'">🔍 Karten suchen</button>
+          <button class="ghost" onclick="location.hash='#/sammlung'">📚 Sammlung</button>
+          <button class="ghost" onclick="location.hash='#/marktplatz'">🛒 Marktplatz</button>
+        </div>
       </div>
-      <div class="actions">
-        <button onclick="location.hash='#/suche'">🔍 Karten suchen</button>
-        <button class="ghost" onclick="location.hash='#/community'">Community</button>
+      <div class="hh-value" id="hh-value"></div>
+    </div>
+
+    <div class="home-sec">
+      <div class="home-sec-h"><h3>Deine Übersicht</h3></div>
+      <div class="an-grid" id="db-stats"></div>
+      <p class="msub" id="db-pricenote" style="margin:6px 0 0"></p>
+    </div>
+    <div class="an-card" id="db-quests" style="display:none"></div>
+
+    <div class="home-sec" id="sec-trending" style="display:none">
+      <div class="home-sec-h"><h3>📈 Im Trend</h3><span class="home-sec-note">deine größten Wertsteigerungen · 30 Tage</span></div>
+      <div class="home-scroller" id="home-trending"></div>
+    </div>
+
+    <div class="home-sec" id="sec-releases" style="display:none">
+      <div class="home-sec-h"><h3>✨ Neue Releases</h3><span class="home-sec-note">frisch erschienene Sets</span></div>
+      <div class="home-scroller" id="home-releases"></div>
+    </div>
+
+    <div class="home-two">
+      <div class="home-sec" id="sec-feed" style="display:none">
+        <div class="home-sec-h"><h3>💬 Community</h3><a href="#/community">alle →</a></div>
+        <div id="home-feed"></div>
+      </div>
+      <div class="home-sec" id="sec-sellers" style="display:none">
+        <div class="home-sec-h"><h3>🏆 Top-Sammler</h3><a href="#/community">Rangliste →</a></div>
+        <div id="home-sellers"></div>
       </div>
     </div>
-    <div class="an-grid" id="db-stats"></div>
-    <p class="msub" id="db-pricenote" style="margin:0 0 14px"></p>
-    <div class="an-card" id="db-quests" style="display:none"></div>
-    <div class="an-card" id="db-shop"></div>
-    <div class="an-card" id="db-news"></div>
-    <p class="msub" style="text-align:center"><a href="legal.html#impressum">Impressum</a> · <a href="legal.html#datenschutz">Datenschutz</a> · <a href="legal.html#disclaimer">Disclaimer</a></p>
+
+    <div class="home-sec" id="sec-reco" style="display:none">
+      <div class="home-sec-h"><h3>🎯 Für dich</h3><span class="home-sec-note" id="reco-note"></span></div>
+      <div class="home-scroller" id="home-reco"></div>
+    </div>
+
+    <footer class="home-footer" id="home-footer"></footer>
   </section>
 
   <!-- ============ SUCHE ============ -->
@@ -1611,27 +1695,8 @@ function refText(c) {
 // ---- Dashboard (Startseite) ----
 function renderShopInfo() {
   const SI = window.SHOP_INFO || {};
-  document.getElementById('db-pricenote').textContent = SI.priceNote || '';
-  const hours = (SI.hours || []).map(([d, z]) =>
-    `<div class="row" style="gap:10px;break-inside:avoid"><span style="width:56px;color:var(--muted)">${escapeHtml(d).slice(0,2)}</span><span${/geschlossen/i.test(z)?' style="color:var(--muted)"':''}>${escapeHtml(z).replace(' Uhr','')}</span></div>`).join('');
-  document.getElementById('db-shop').innerHTML = `
-    <h3>🏪 ${escapeHtml(SI.name || 'Unser Shop')}</h3>
-    ${SI.slogan ? `<p style="color:#c7cdd6;margin:6px 0"><b>${escapeHtml(SI.slogan)}</b></p>` : ''}
-    ${SI.description ? `<p style="color:#c7cdd6;margin:6px 0">${escapeHtml(SI.description)}</p>` : ''}
-    <div class="mv-cols" style="margin-top:12px">
-      <div>
-        <div class="ac-label" style="margin-bottom:6px">ADRESSE &amp; KONTAKT</div>
-        <p style="color:#c7cdd6;margin:0">${(SI.address || []).map(escapeHtml).join('<br />')}</p>
-        <p style="color:#c7cdd6;margin:6px 0 0">${SI.phone ? 'Telefon: ' + escapeHtml(SI.phone) + '<br />' : ''}${SI.email ? `E-Mail: <a href="mailto:${escapeHtml(SI.email)}">${escapeHtml(SI.email)}</a>` : ''}</p>
-      </div>
-      <div>
-        <div class="ac-label" style="margin-bottom:6px">ÖFFNUNGSZEITEN</div>
-        <div style="columns:2;column-gap:22px">${hours}</div>
-      </div>
-    </div>`;
-  document.getElementById('db-news').innerHTML = `
-    <h3>✨ Neu in der App</h3>
-    ${(SI.news || []).map(n => `<p style="color:#c7cdd6;margin:5px 0">${escapeHtml(n)}</p>`).join('')}`;
+  const pn = document.getElementById('db-pricenote');
+  if (pn) pn.textContent = SI.priceNote || '';
 }
 
 function renderQuests(p) {
@@ -1661,7 +1726,16 @@ function renderQuests(p) {
 
 async function loadDashboard() {
   renderShopInfo();
-  // Quests + Level (eigenes Profil)
+  renderHomeFooter();
+  (async () => {
+    try {
+      const name = await self.DB.getSetting('displayName');
+      const hour = new Date().getHours();
+      const greet = hour < 5 ? 'Gute Nacht' : hour < 11 ? 'Guten Morgen' : hour < 18 ? 'Hallo' : 'Guten Abend';
+      const eb = document.getElementById('hh-eyebrow'), ti = document.getElementById('hh-title');
+      if (name) { if (eb) eb.textContent = greet + ','; if (ti) ti.textContent = name; }
+    } catch {}
+  })();
   (async () => {
     try {
       const s = await self.DB.getSession();
@@ -1673,7 +1747,7 @@ async function loadDashboard() {
   })();
   const el = document.getElementById('db-stats');
   const stat = (k, v, sub) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div>${sub?`<div class="sub">${sub}</div>`:''}</div>`;
-  el.innerHTML = stat('Sammlungswert', '…') + stat('Community-Angebote', '…') + stat('Wunschliste', '…') + stat('Offen für dich', '…');
+  el.innerHTML = stat('Sammlungswert', '…') + stat('Angebote', '…') + stat('Wunschliste', '…') + stat('Offen für dich', '…');
   try {
     const [h, w, m, u, t] = await Promise.all([
       fetch('api/collection/history').then(r=>r.json()).catch(()=>null),
@@ -1685,10 +1759,123 @@ async function loadDashboard() {
     const tot = h && h.totals ? h.totals.total : null;
     el.innerHTML =
       stat('Sammlungswert', tot != null ? fmt(tot, 'EUR') : '–', '30-Tage-Schnitt') +
-      stat('Community-Angebote', (m && m.items) ? m.items.length : '–') +
-      stat('Wunschliste', (w && w.items) ? w.items.length : '–') +
-      stat('Offen für dich', (u.count || 0) + (t.count || 0), 'Nachrichten + Trade-Anfragen');
+      stat('Angebote', (m && m.items) ? m.items.length : '–', 'im Marktplatz') +
+      stat('Wunschliste', (w && w.items) ? w.items.length : '–', 'Karten') +
+      stat('Offen für dich', (u.count || 0) + (t.count || 0), 'Nachrichten + Trades');
+    const hv = document.getElementById('hh-value');
+    if (hv && tot != null && tot > 0) hv.innerHTML = `<div class="hh-value-label">Sammlungswert</div><div class="hh-value-num">${fmt(tot,'EUR')}</div>`;
+    renderReco((m && m.items) || [], (w && w.items) || []);
   } catch { el.innerHTML = ''; }
+  loadTrendingHome(); loadReleasesHome(); loadFeedHome(); loadSellersHome();
+}
+
+function homeMiniCard(o) {
+  const cur = o.currency || 'EUR';
+  const badge = o.pct != null ? `<span class="mc-delta ${o.pct>=0?'up':'down'}">${o.pct>=0?'▲':'▼'} ${Math.abs(Math.round(o.pct))}%</span>` : '';
+  const price = o.price != null ? fmt(o.price, cur) : '';
+  return `<div class="mini-card">
+    ${o.imageUrl ? `<img src="${o.imageUrl}" alt="" loading="lazy"/>` : '<div class="mc-ph">🃏</div>'}
+    <div class="mc-body">
+      <div class="mc-name" title="${escapeHtml(o.name||'')}">${escapeHtml(o.name||'')}</div>
+      <div class="mc-sub">${escapeHtml(o.setName||'')}</div>
+      <div class="mc-price">${price} ${badge}</div>
+    </div></div>`;
+}
+async function loadTrendingHome() {
+  try {
+    const d = await fetch('api/collection/movers?days=30').then(r=>r.json());
+    const g = (d && d.gainers) || [];
+    if (!g.length) return;
+    document.getElementById('home-trending').innerHTML = g.map(m => homeMiniCard({ name:m.name, setName:m.setName, imageUrl:m.imageUrl, price:m.to, currency:m.currency, pct:m.pct })).join('');
+    document.getElementById('home-trending').onclick = ()=>{ location.hash='#/analyse'; };
+    document.getElementById('sec-trending').style.display = '';
+  } catch {}
+}
+async function loadReleasesHome() {
+  try {
+    const games = ['pokemon','magic','yugioh'];
+    const lists = await Promise.all(games.map(g =>
+      fetch('api/sets?game='+g).then(r=>r.json()).then(d=>((d && d.sets)||[]).slice(0,4).map(s=>({ ...s, game:g }))).catch(()=>[])
+    ));
+    const sets = [].concat(...lists).filter(s=>s && s.name).slice(0, 12);
+    if (!sets.length) return;
+    document.getElementById('home-releases').innerHTML = sets.map(s => `
+      <div class="rel-card">
+        ${s.logo ? `<img src="${s.logo}" alt=""/>` : `<div class="rel-ph">${escapeHtml(GAME_LABEL[s.game]||'')}</div>`}
+        <div class="rel-name" title="${escapeHtml(s.name)}">${escapeHtml(s.name)}</div>
+        <div class="rel-sub">${escapeHtml(GAME_LABEL[s.game]||s.game)}${s.releaseDate?' · '+String(s.releaseDate).slice(0,4):''}</div>
+      </div>`).join('');
+    document.getElementById('sec-releases').style.display = '';
+  } catch {}
+}
+async function loadFeedHome() {
+  try {
+    let threads = [];
+    const cats = ['general','onepiece','pokemon','magic'];
+    const tl = await Promise.all(cats.map(c => (self.DB.listThreads ? self.DB.listThreads(c).catch(()=>[]) : Promise.resolve([]))));
+    threads = [].concat(...tl).sort((a,b)=>String(b.last_activity||'').localeCompare(String(a.last_activity||''))).slice(0,5);
+    if (!threads.length) return;
+    document.getElementById('home-feed').innerHTML = threads.map(t => `
+      <div class="feed-item" data-tid="${t.id}">
+        <span class="fi-ic">💬</span>
+        <div class="fi-body"><div class="fi-title">${escapeHtml(t.title)}</div>
+          <div class="fi-sub">${escapeHtml((typeof FORUM_CAT_LABEL!=='undefined' && FORUM_CAT_LABEL[t.category])||t.category)} · von ${escapeHtml(t.author_name||'Sammler')} · 💬 ${t.reply_count||0}</div></div>
+      </div>`).join('');
+    document.getElementById('sec-feed').style.display = '';
+  } catch {}
+}
+async function loadSellersHome() {
+  try {
+    const d = await fetch('api/leaderboard').then(r=>r.json());
+    const rows = (d && d.rows) || [];
+    if (!rows.length) return;
+    document.getElementById('home-sellers').innerHTML = rows.slice(0,5).map((r,i) => {
+      const flag = countryFlag(r.country); const lv = levelFor(r.points);
+      return `<div class="seller-row" data-uid="${escapeHtml(r.user_id||'')}">
+        <span class="sr-rank ${i<3?'top':''}">${i+1}</span>
+        <span class="sr-name">${flag?flag+' ':''}${escapeHtml(r.name||'Sammler')} <small>Lv. ${lv.n} ${escapeHtml(lv.name)}</small></span>
+        <span class="ci-spacer"></span>
+        <span class="sr-pts">${r.points||0} P.</span>
+      </div>`;
+    }).join('');
+    document.getElementById('sec-sellers').style.display = '';
+  } catch {}
+}
+function renderReco(market, wish) {
+  try {
+    if (!market || !market.length) return;
+    const wishKeys = new Set((wish||[]).map(i => i.game + '|' + i.external_id));
+    let recos = market.filter(c => !c.is_mine && c.external_id && wishKeys.has(c.game + '|' + c.external_id));
+    let note = 'passend zu deiner Wunschliste';
+    if (!recos.length) { recos = market.filter(c => !c.is_mine).sort((a,b)=>(b.asking_price||b.price_current||0)-(a.asking_price||a.price_current||0)); note = 'aktuelle Angebote aus der Community'; }
+    recos = recos.slice(0,10);
+    if (!recos.length) return;
+    const rn = document.getElementById('reco-note'); if (rn) rn.textContent = note;
+    document.getElementById('home-reco').innerHTML = recos.map(c => homeMiniCard({ name:c.name, setName:c.set_name, imageUrl:c.image_url, price:(c.asking_price ?? c.price_current), currency:c.currency })).join('');
+    document.getElementById('home-reco').onclick = ()=>{ location.hash='#/marktplatz'; };
+    document.getElementById('sec-reco').style.display = '';
+  } catch {}
+}
+function renderHomeFooter() {
+  const SI = window.SHOP_INFO || {};
+  const el = document.getElementById('home-footer'); if (!el) return;
+  const hours = (SI.hours || []).map(([d,z]) => `<div class="foot-hours-row"><span>${escapeHtml(d)}</span><span class="${/geschlossen/i.test(z)?'muted':''}">${escapeHtml(z).replace(' Uhr','')}</span></div>`).join('');
+  const news = (SI.news || []).map(n => `<li>${escapeHtml(n)}</li>`).join('');
+  el.innerHTML = `
+    <div class="foot-grid">
+      <div class="foot-col">
+        <div class="foot-brand">🏪 ${escapeHtml(SI.name || 'Tiny Tokyo')}</div>
+        ${SI.slogan?`<p>${escapeHtml(SI.slogan)}</p>`:''}
+        ${SI.description?`<p class="muted">${escapeHtml(SI.description)}</p>`:''}
+      </div>
+      <div class="foot-col"><h4>Adresse &amp; Kontakt</h4>
+        <p>${(SI.address||[]).map(escapeHtml).join('<br/>')}</p>
+        <p>${SI.phone?'Tel: '+escapeHtml(SI.phone)+'<br/>':''}${SI.email?`<a href="mailto:${escapeHtml(SI.email)}">${escapeHtml(SI.email)}</a>`:''}</p>
+      </div>
+      <div class="foot-col"><h4>Öffnungszeiten</h4><div class="foot-hours">${hours}</div></div>
+      <div class="foot-col"><h4>Neu in der App</h4><ul class="foot-news">${news}</ul></div>
+    </div>
+    <div class="foot-legal"><a href="legal.html#impressum">Impressum</a> · <a href="legal.html#datenschutz">Datenschutz</a> · <a href="legal.html#disclaimer">Disclaimer</a></div>`;
 }
 
 // ---- Meta laden (Sprachen pro Spiel) ----
