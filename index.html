@@ -513,6 +513,10 @@
   .pass-badges { display:flex; flex-wrap:wrap; gap:7px; }
   .pass-badge { background:var(--surface-2); border:1px solid var(--border); border-radius:999px; padding:5px 11px; font-size:.76rem; color:var(--muted); } .pass-badge small{ opacity:.8; }
   .pass-badge.on { background:var(--gold-weak); color:var(--gold); border-color:transparent; font-weight:600; }
+  .pass-top { display:flex; align-items:center; gap:16px; margin-bottom:14px; }
+  .pass-coins { text-align:center; flex-shrink:0; background:var(--gold-weak); border:1px solid transparent; border-radius:var(--r); padding:8px 14px; color:var(--gold); }
+  .pass-coins b { font-family:'Space Grotesk',sans-serif; font-size:1.3rem; display:block; } .pass-coins small{ font-size:.68rem; text-transform:uppercase; letter-spacing:.06em; }
+  .pass-group { min-width:0; }
 </style>
 </head>
 <body>
@@ -1889,7 +1893,7 @@ async function loadDashboard() {
       if (!s || !s.user) return;
       const r = await fetch('api/profile/' + s.user.id);
       const d = await r.json();
-      if (r.ok && d.profile) renderQuests(d.profile);
+      /* Quests sind jetzt Teil des Sammler-Pass (renderPass) */
     } catch {}
   })();
   const el = document.getElementById('db-stats');
@@ -3797,36 +3801,60 @@ function renderProfileActivity(posts) {
 async function renderPass() {
   const box = document.getElementById('home-pass'); if (!box) return;
   await ensureMyUid().catch(()=>{});
-  let cards = [], wishN = 0, posts = [], points = 0, rank = null;
+  let cards = [], wishN = 0, posts = [], pp = {};
   try { const d = await (await fetch('api/collection')).json(); cards = d.cards || []; } catch {}
   try { const w = await (await fetch('api/wishlist')).json(); wishN = (w.items || []).length; } catch {}
   try { if (self.DB.listPosts && myUid) posts = (await self.DB.listPosts()).filter(p => p.user_id === myUid); } catch {}
-  try { const s = await self.DB.getSession(); if (s && s.user) { const pr = await (await fetch('api/profile/' + s.user.id)).json(); if (pr.profile) { points = pr.profile.points || 0; rank = pr.profile.rank; } } } catch {}
+  try { const s = await self.DB.getSession(); if (s && s.user) { const pr = await (await fetch('api/profile/' + s.user.id)).json(); pp = pr.profile || {}; } } catch {}
+  const points = pp.points || 0, rank = pp.rank;
   const owned = cards.filter(c => c.status !== 'sold'), sold = cards.filter(c => c.status === 'sold');
   const forSale = owned.filter(c => c.for_sale).length;
   const cxp = communityXp(posts);
   const total = points + cxp;
   const lp = levelProgress(total);
   const parts = [['📚 Sammlung', Math.min(owned.length, 400) * 10], ['💰 Verkäufe', sold.length * 50], ['🛒 Angebote', forSale * 25], ['📝 Wunschliste', Math.min(wishN, 200) * 5], ['💬 Community', cxp]].filter(x => x[1] > 0);
+  // Weekly (Reset montags)
   const mon = new Date(); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7)); mon.setHours(0, 0, 0, 0);
   const wk = d => d && new Date(d) >= mon;
-  const addedW = owned.filter(c => wk(c.added_at)).length;
-  const soldW = sold.filter(c => wk(c.sold_date)).length;
-  const postsW = posts.filter(p => wk(p.created_at)).length;
-  const chal = [['➕ 3 Karten hinzufügen', addedW, 3], ['💬 2 Beiträge schreiben', postsW, 2], ['💰 1 Karte verkaufen', soldW, 1]];
+  const weekly = [
+    ['➕ 3 Karten hinzufügen', owned.filter(c => wk(c.added_at)).length, 3],
+    ['💬 2 Beiträge schreiben', posts.filter(p => wk(p.created_at)).length, 2],
+    ['💰 1 Karte verkaufen', sold.filter(c => wk(c.sold_date)).length, 1],
+  ];
+  // Dauerhafte Meilensteine
+  const profDone = [pp.name && pp.name !== 'Sammler', pp.country, pp.bio, pp.contact].filter(Boolean).length;
+  const perm = [
+    ['👤 Profil vervollständigen', profDone, 4],
+    ['📚 10 Karten sammeln', Math.min(owned.length, 10), 10],
+    ['🛒 3 Karten anbieten', Math.min(forSale, 3), 3],
+    ['🤝 Ersten Trade abschließen', Math.min(pp.trades_done || 0, 1), 1],
+    ['⭐ 5 Feedbacks geben', Math.min(pp.fb_given || 0, 5), 5],
+    ['🔄 10 Trades abschließen', Math.min(pp.trades_done || 0, 10), 10],
+  ];
   const badges = [['🛒','100 Verkäufe', sold.length, 100], ['🏆','Top Seller', (rank != null && rank <= 3) ? 1 : 0, 1], ['📚','Sammler 100', owned.length, 100], ['📚','Sammler 500', owned.length, 500], ['📖','Guide-Autor', posts.filter(p => p.kind === 'guide').length, 1], ['⭐','Reviewer', posts.filter(p => p.kind === 'review').length, 3], ['🤝','Helpful Member', posts.length, 5]];
+  const earnedBadges = badges.filter(b => b[2] >= b[3]).length;
+  const permDone = perm.filter(q => q[1] >= q[2]).length;
+  const coins = earnedBadges * 100 + permDone * 40 + Math.floor(total / 500) * 10;
   const chalBar = (t, n, m) => `<div class="pass-chal ${n >= m ? 'done' : ''}"><span>${n >= m ? '✓ ' : ''}${t}</span><span class="ci-spacer"></span><span class="pass-chal-n">${Math.min(n, m)}/${m}</span></div>`;
   const badgeChip = (ic, name, n, m) => `<span class="pass-badge ${n >= m ? 'on' : ''}" title="${n >= m ? 'Erreicht' : Math.min(n, m) + ' / ' + m}">${ic} ${escapeHtml(name)}${n >= m ? '' : ` <small>${Math.min(n, m)}/${m}</small>`}</span>`;
   box.innerHTML = `
     <div class="home-sec"><div class="home-sec-h"><h3>🎖️ Sammler-Pass</h3><span class="home-sec-note">Level ${lp.n} · ${escapeHtml(lp.name)}</span></div>
       <div class="pass-card">
-        <div class="pf-xp-label"><span>Level ${lp.n} · ${escapeHtml(lp.name)}</span><span>${lp.next != null ? `${lp.into} / ${lp.span} XP` : 'Max-Level'}</span></div>
-        <div class="pf-xp-bar" style="margin-bottom:14px"><div class="pf-xp-fill" style="width:${lp.pct}%"></div></div>
+        <div class="pass-top">
+          <div style="flex:1;min-width:0">
+            <div class="pf-xp-label"><span>Level ${lp.n} · ${escapeHtml(lp.name)}</span><span>${lp.next != null ? `${lp.into} / ${lp.span} XP` : 'Max-Level'}</span></div>
+            <div class="pf-xp-bar"><div class="pf-xp-fill" style="width:${lp.pct}%"></div></div>
+          </div>
+          <div class="pass-coins">🪙 <b>${coins}</b><small>Coins</small></div>
+        </div>
         <div class="pass-break">${parts.map(x => `<span class="pass-b">${x[0]} <b>${x[1]}</b></span>`).join('')}</div>
         <div class="pass-cols">
-          <div><div class="pass-h">🎯 Diese Woche</div>${chal.map(c => chalBar(c[0], c[1], c[2])).join('')}</div>
-          <div><div class="pass-h">🏅 Badges</div><div class="pass-badges">${badges.map(b => badgeChip(b[0], b[1], b[2], b[3])).join('')}</div></div>
+          <div class="pass-group"><div class="pass-h">🎯 Diese Woche <small>· wöchentlich neu</small></div>${weekly.map(c => chalBar(c[0], c[1], c[2])).join('')}</div>
+          <div class="pass-group"><div class="pass-h">🏆 Meilensteine <small>· dauerhaft</small></div>${perm.map(c => chalBar(c[0], c[1], c[2])).join('')}</div>
         </div>
+        <div class="pass-h" style="margin-top:16px">🏅 Badges</div>
+        <div class="pass-badges">${badges.map(b => badgeChip(b[0], b[1], b[2], b[3])).join('')}</div>
+        <p class="msub" style="margin:12px 0 0">🪙 Coins sammelst du über Challenges &amp; Badges – kosmetische Freischaltungen folgen.</p>
       </div>
     </div>`;
 }
