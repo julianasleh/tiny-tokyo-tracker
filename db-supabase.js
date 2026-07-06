@@ -521,6 +521,42 @@
     const { error } = await getClient().from('card_comments').delete().eq('id', id);
     if (error) throw new Error(error.message);
   }
+  // --- Community-Beiträge (Feed) ---------------------------------------------
+  async function listPosts(kind) {
+    let q = getClient().from('community_posts_view').select('*').order('last_activity', { ascending: false }).limit(80);
+    if (kind) q = q.eq('kind', kind);
+    return must(await q);
+  }
+  async function getPost(id) {
+    const post = must(await getClient().from('community_posts_view').select('*').eq('id', id).maybeSingle());
+    const comments = must(await getClient().from('community_post_comments').select('*').eq('post_id', id).order('created_at', { ascending: true }));
+    return { post, comments };
+  }
+  async function createPost(p) {
+    const uid = await requireUserId();
+    const { data, error } = await getClient().from('community_posts').insert({ kind: p.kind, user_id: uid, title: p.title, body: p.body, image_url: p.imageUrl || null, game: p.game || null }).select().single();
+    if (error) throw new Error(error.message);
+    return data;
+  }
+  async function deletePost(id) {
+    const { error } = await getClient().from('community_posts').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  }
+  async function addPostComment(postId, body) {
+    const uid = await requireUserId();
+    const { data, error } = await getClient().from('community_post_comments').insert({ post_id: postId, user_id: uid, body }).select().single();
+    if (error) throw new Error(error.message);
+    return data;
+  }
+  async function deletePostComment(id) {
+    const { error } = await getClient().from('community_post_comments').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  }
+  async function togglePostLike(postId, liked) {
+    const uid = await requireUserId();
+    if (liked) { const { error } = await getClient().from('community_post_likes').delete().eq('post_id', postId).eq('user_id', uid); if (error) throw new Error(error.message); }
+    else { const { error } = await getClient().from('community_post_likes').insert({ post_id: postId, user_id: uid }); if (error) throw new Error(error.message); }
+  }
 
   // --- Nachrichten -----------------------------------------------------------
   async function listMessages() {
@@ -769,6 +805,7 @@
     listThreads, getThread, createThread, createPost, deleteThread, deletePost,
     init, signUp, signIn, signOut, getSession, onAuthChange, resetPassword, updatePassword,
     getSetting, setSetting, listMarket, listSeeking, listCardComments, addCardComment, deleteCardComment,
+    listPosts, getPost, createPost, deletePost, addPostComment, deletePostComment, togglePostLike,
     listMessages, unreadMessages, sendMessage, markMessagesRead, deleteMessage, leaderboard,
     getProfile, listRatings, rateUser, deleteRating,
     listTrades, createTrade, updateTrade, openTradesCount,

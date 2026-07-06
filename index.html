@@ -477,6 +477,17 @@
   #coll-overview { margin:6px 0 16px; }
   #coll-overview .home-sec { margin:18px 0; }
   #coll-overview .home-sec:first-child { margin-top:6px; }
+  /* ===== Community-Beiträge (Phase 6) ===== */
+  .posts-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px; }
+  .post-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); overflow:hidden; cursor:pointer; box-shadow:var(--shadow-sm); transition:transform var(--trans),box-shadow var(--trans),border-color var(--trans); }
+  .post-card:hover { transform:translateY(-4px); box-shadow:var(--shadow-lg); border-color:var(--border-strong); }
+  .pc-img { aspect-ratio:16/10; background:#0a0c10; } .pc-img img{ width:100%; height:100%; object-fit:cover; }
+  .pc-body { padding:13px 15px 15px; }
+  .pc-kind { display:inline-block; background:var(--accent-weak); color:var(--accent); border-radius:999px; padding:3px 11px; font-size:.72rem; font-weight:700; margin-bottom:9px; }
+  .pc-title { font-weight:600; font-size:1rem; line-height:1.3; }
+  .pc-sub { color:var(--muted); font-size:.76rem; margin-top:5px; }
+  .pc-meta { display:flex; gap:16px; margin-top:11px; color:var(--muted); font-size:.84rem; }
+  .pc-like { cursor:pointer; } .pc-like.on { color:var(--neg); }
 </style>
 </head>
 <body>
@@ -870,6 +881,7 @@
         <button class="chip active" data-tab="freunde">Freunde <span class="count" id="cm-friends-tab"></span></button>
         <button class="chip" data-tab="chat">Chat</button>
         <button class="chip" data-tab="forum">Forum</button>
+        <button class="chip" data-tab="beitraege">Beiträge</button>
         <button class="chip" data-tab="postfach">Postfach <span class="count" id="cm-unread-tab"></span></button>
         <button class="chip" data-tab="rangliste">Rangliste</button>
       </div>
@@ -915,6 +927,24 @@
         <button class="ghost" id="forum-new-btn" type="button">+ Neues Thema</button>
       </div>
       <div id="forum-body"></div>
+    </div>
+
+    <!-- Beiträge / Feed -->
+    <div id="community-posts" style="display:none">
+      <div class="filterbar row" id="posts-kinds">
+        <button class="chip active" data-k="">Alle</button>
+        <button class="chip" data-k="showcase">🖼️ Showcase</button>
+        <button class="chip" data-k="pulls">🎉 Pulls</button>
+        <button class="chip" data-k="deckbuilding">🃏 Deckbuilding</button>
+        <button class="chip" data-k="diskussion">💬 Diskussion</button>
+        <button class="chip" data-k="collection_update">📈 Collection</button>
+        <button class="chip" data-k="guide">📖 Guide</button>
+        <button class="chip" data-k="review">⭐ Review</button>
+        <button class="chip" data-k="trade">🔄 Tausch</button>
+        <span class="ci-spacer"></span>
+        <button id="posts-new-btn" type="button">+ Beitrag</button>
+      </div>
+      <div id="posts-body"></div>
     </div>
   </section>
 
@@ -1508,6 +1538,28 @@
   <div class="modal mpl-modal">
     <button class="detail-close" id="mpl-close" style="z-index:2" title="Schließen">✕</button>
     <div class="mpl-detail" id="mpl-detail"></div>
+  </div>
+</div>
+<div class="modal-bg" id="pcomp-modal">
+  <div class="modal">
+    <h3>Beitrag erstellen</h3>
+    <div class="mrow">
+      <div class="field"><label>Art</label><select id="pcomp-kind">
+        <option value="showcase">🖼️ Showcase</option><option value="pulls">🎉 Pulls</option><option value="deckbuilding">🃏 Deckbuilding</option><option value="diskussion">💬 Diskussion</option><option value="collection_update">📈 Collection Update</option><option value="guide">📖 Guide</option><option value="review">⭐ Review</option><option value="trade">🔄 Tauschangebot</option>
+      </select></div>
+      <div class="field"><label>Spiel (optional)</label><select id="pcomp-game"><option value="">–</option><option value="pokemon">Pokémon</option><option value="magic">Magic</option><option value="yugioh">Yu-Gi-Oh</option><option value="onepiece">One Piece</option></select></div>
+    </div>
+    <div class="field"><label>Titel</label><input type="text" id="pcomp-title" maxlength="160" placeholder="Worum geht's?"/></div>
+    <div class="field"><label>Text</label><textarea id="pcomp-body" rows="6" maxlength="8000" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 13px;color:var(--text);font:inherit;resize:vertical"></textarea></div>
+    <div class="field"><label>Bild-URL (optional)</label><input type="text" id="pcomp-img" placeholder="https://…/bild.jpg"/></div>
+    <div class="row" style="gap:8px;margin-top:6px"><button id="pcomp-save">Veröffentlichen</button><button class="ghost" id="pcomp-close">Abbrechen</button></div>
+    <p class="msub" id="pcomp-status" style="min-height:1.2em;margin:8px 0 0"></p>
+  </div>
+</div>
+<div class="modal-bg" id="post-modal">
+  <div class="modal" style="max-width:640px;position:relative">
+    <button class="detail-close" id="post-close" title="Schließen">✕</button>
+    <div id="post-detail"></div>
   </div>
 </div>
 <script src="lib/supabase.js"></script>
@@ -2741,17 +2793,108 @@ function cmShowTab(tab) {
   show('community-friends', tab==='freunde');
   show('community-chat', tab==='chat');
   show('community-forum', tab==='forum');
+  show('community-posts', tab==='beitraege');
   if (tab!=='chat') teardownChat();
   if (tab==='postfach') loadInbox();
   if (tab==='rangliste') loadBoard();
   if (tab==='freunde') loadFriends();
   if (tab==='chat') enterChat();
   if (tab==='forum') loadForum();
+  if (tab==='beitraege') loadPosts();
   ensurePresence();
 }
 document.getElementById('cm-tabs').addEventListener('click', e=>{
   const chip = e.target.closest('.chip'); if (!chip) return;
   cmShowTab(chip.dataset.tab);
+});
+
+// ===== Community-Beiträge (Feed, Phase 6) =====
+const POST_KINDS = { showcase:['🖼️','Showcase'], pulls:['🎉','Pulls'], deckbuilding:['🃏','Deckbuilding'], diskussion:['💬','Diskussion'], collection_update:['📈','Collection Update'], guide:['📖','Guide'], review:['⭐','Review'], trade:['🔄','Tauschangebot'] };
+let postsKind = '', _posts = [];
+async function loadPosts() {
+  await ensureMyUid().catch(()=>{});
+  const box = document.getElementById('posts-body'); box.innerHTML = '<div class="empty">Lade Beiträge…</div>';
+  try { _posts = await self.DB.listPosts(postsKind || undefined); }
+  catch (e) { box.innerHTML = `<div class="empty">${escapeHtml(e.message||'Konnte Beiträge nicht laden. Wurde supabase-community-13.sql ausgeführt?')}</div>`; return; }
+  if (!_posts.length) { box.innerHTML = '<div class="empty">Noch keine Beiträge – erstelle den ersten mit „+ Beitrag".</div>'; return; }
+  box.innerHTML = '<div class="posts-grid">' + _posts.map(postCard).join('') + '</div>';
+}
+function postCard(p) {
+  const k = POST_KINDS[p.kind] || ['📌', p.kind];
+  const flag = countryFlag(p.author_country);
+  const d = new Date(p.last_activity).toLocaleDateString('de-DE', { day:'2-digit', month:'short' });
+  return `<div class="post-card" data-pid="${p.id}">
+    ${p.image_url?`<div class="pc-img"><img src="${escapeHtml(p.image_url)}" loading="lazy" alt=""/></div>`:''}
+    <div class="pc-body">
+      <span class="pc-kind">${k[0]} ${escapeHtml(k[1])}</span>
+      <div class="pc-title">${escapeHtml(p.title)}</div>
+      <div class="pc-sub">${flag?flag+' ':''}${escapeHtml(p.author_name||'Sammler')}${p.game&&GAME_LABEL[p.game]?' · '+GAME_LABEL[p.game]:''} · ${d}</div>
+      <div class="pc-meta">
+        <span class="pc-like ${p.liked?'on':''}" data-act="like" data-pid="${p.id}">${p.liked?'❤':'🤍'} ${p.like_count||0}</span>
+        <span>💬 ${p.comment_count||0}</span>
+      </div>
+    </div></div>`;
+}
+document.getElementById('posts-body')?.addEventListener('click', async e => {
+  const like = e.target.closest('[data-act="like"]');
+  if (like) { e.stopPropagation(); const p = _posts.find(x => String(x.id) === like.dataset.pid); if (!p) return; try { await self.DB.togglePostLike(p.id, p.liked); loadPosts(); } catch (err) { alert(err.message); } return; }
+  const card = e.target.closest('[data-pid]'); if (card) openPostDetail(card.dataset.pid);
+});
+async function openPostDetail(id) {
+  await ensureMyUid().catch(()=>{});
+  document.getElementById('post-modal').classList.add('open');
+  const box = document.getElementById('post-detail'); box.innerHTML = '<div class="empty">Lade…</div>';
+  let data; try { data = await self.DB.getPost(id); } catch (e) { box.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; return; }
+  const p = data.post; if (!p) { box.innerHTML = '<div class="empty">Beitrag nicht gefunden.</div>'; return; }
+  const k = POST_KINDS[p.kind] || ['📌', p.kind]; const flag = countryFlag(p.author_country);
+  const del = p.user_id === myUid ? `<button class="ghost" id="post-del" style="margin-left:auto">Löschen</button>` : '';
+  box.innerHTML = `
+    <div class="row" style="align-items:center"><span class="pc-kind">${k[0]} ${escapeHtml(k[1])}</span>${del}</div>
+    <h3 style="font-family:'Space Grotesk',sans-serif;margin:10px 0 4px;font-size:1.3rem">${escapeHtml(p.title)}</h3>
+    <div class="msub" style="margin-bottom:12px"><span data-act="pprofile" data-uid="${escapeHtml(p.user_id)}" style="cursor:pointer;border-bottom:1px dotted var(--muted)">${flag?flag+' ':''}<b>${escapeHtml(p.author_name||'Sammler')}</b></span> · ${new Date(p.created_at).toLocaleString('de-DE',{day:'2-digit',month:'short',year:'numeric'})}${p.game&&GAME_LABEL[p.game]?' · '+GAME_LABEL[p.game]:''}</div>
+    ${p.image_url?`<img src="${escapeHtml(p.image_url)}" alt="" style="max-width:100%;border-radius:var(--r);margin-bottom:12px"/>`:''}
+    <div style="white-space:pre-wrap;word-break:break-word">${escapeHtml(p.body)}</div>
+    <div class="row" style="gap:14px;margin:16px 0;align-items:center">
+      <button class="${p.liked?'':'ghost'}" id="post-like">${p.liked?'❤ Gefällt dir':'🤍 Gefällt mir'} · ${p.like_count||0}</button>
+      <span class="msub">💬 ${data.comments.length} Kommentare</span>
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:14px">
+      <form id="post-cmt-form" class="row" style="gap:8px" autocomplete="off"><input type="text" id="post-cmt-in" maxlength="2000" placeholder="Kommentieren…" style="flex:1"/><button type="submit">Senden</button></form>
+      <div id="post-comments" style="margin-top:12px"></div>
+    </div>`;
+  renderPostComments(data.comments, id);
+  const lk = document.getElementById('post-like'); if (lk) lk.onclick = async () => { try { await self.DB.togglePostLike(p.id, p.liked); openPostDetail(id); loadPosts(); } catch (e) { alert(e.message); } };
+  const dl = document.getElementById('post-del'); if (dl) dl.onclick = async () => { if (!confirm('Beitrag löschen?')) return; try { await self.DB.deletePost(p.id); closePost(); loadPosts(); } catch (e) { alert(e.message); } };
+  const pf = document.getElementById('post-cmt-form'); if (pf) pf.onsubmit = async (e) => { e.preventDefault(); const inp = document.getElementById('post-cmt-in'); const b = inp.value.trim(); if (!b) return; inp.value = ''; try { await self.DB.addPostComment(id, b); openPostDetail(id); loadPosts(); } catch (err) { alert(err.message); inp.value = b; } };
+  const pp = box.querySelector('[data-act="pprofile"]'); if (pp) pp.addEventListener('click', () => { closePost(); openProfile(pp.dataset.uid); });
+}
+function renderPostComments(comments, postId) {
+  const box = document.getElementById('post-comments');
+  if (!comments.length) { box.innerHTML = '<span class="msub">Noch keine Kommentare.</span>'; return; }
+  box.innerHTML = comments.map(m => { const flag = countryFlag(m.author_country); const t = new Date(m.created_at).toLocaleString('de-DE', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }); const del = m.user_id === myUid ? ` <span data-act="pc-del" data-id="${m.id}" style="cursor:pointer;color:var(--muted)">✕</span>` : ''; return `<div class="dt-comment"><div class="dc-head">${flag?flag+' ':''}<b>${escapeHtml(m.author_name||'Sammler')}</b> · ${t}${del}</div><div class="dc-body">${escapeHtml(m.body)}</div></div>`; }).join('');
+  box.querySelectorAll('[data-act="pc-del"]').forEach(x => x.addEventListener('click', async () => { try { await self.DB.deletePostComment(x.dataset.id); openPostDetail(postId); } catch (e) { alert(e.message); } }));
+}
+function closePost() { document.getElementById('post-modal').classList.remove('open'); }
+function openPostComposer() {
+  document.getElementById('pcomp-kind').value = postsKind || 'showcase';
+  document.getElementById('pcomp-title').value = ''; document.getElementById('pcomp-body').value = ''; document.getElementById('pcomp-img').value = ''; document.getElementById('pcomp-game').value = '';
+  document.getElementById('pcomp-status').textContent = '';
+  document.getElementById('pcomp-modal').classList.add('open');
+}
+document.getElementById('posts-kinds')?.addEventListener('click', e => { const chip = e.target.closest('.chip[data-k]'); if (!chip) return; document.querySelectorAll('#posts-kinds .chip').forEach(c => c.classList.toggle('active', c === chip)); postsKind = chip.dataset.k; loadPosts(); });
+document.getElementById('posts-new-btn')?.addEventListener('click', openPostComposer);
+document.getElementById('post-close')?.addEventListener('click', closePost);
+document.getElementById('post-modal')?.addEventListener('click', e => { if (e.target.id === 'post-modal') closePost(); });
+document.getElementById('pcomp-close')?.addEventListener('click', () => document.getElementById('pcomp-modal').classList.remove('open'));
+document.getElementById('pcomp-modal')?.addEventListener('click', e => { if (e.target.id === 'pcomp-modal') document.getElementById('pcomp-modal').classList.remove('open'); });
+document.getElementById('pcomp-save')?.addEventListener('click', async () => {
+  const kind = document.getElementById('pcomp-kind').value; const title = document.getElementById('pcomp-title').value.trim(); const body = document.getElementById('pcomp-body').value.trim();
+  const imageUrl = document.getElementById('pcomp-img').value.trim(); const game = document.getElementById('pcomp-game').value || null;
+  const st = document.getElementById('pcomp-status');
+  if (!title || !body) { st.textContent = 'Bitte Titel und Text ausfüllen.'; return; }
+  st.textContent = 'Speichere…';
+  try { const post = await self.DB.createPost({ kind, title, body, imageUrl, game }); document.getElementById('pcomp-modal').classList.remove('open'); loadPosts(); openPostDetail(post.id); }
+  catch (e) { st.textContent = e.message || 'Konnte Beitrag nicht erstellen. Wurde supabase-community-13.sql ausgeführt?'; }
 });
 
 // ===== Marktplatz: Angebote / Gesuche / Trades =====
