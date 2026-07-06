@@ -490,9 +490,9 @@
   .pc-like { cursor:pointer; } .pc-like.on { color:var(--neg); }
   /* ===== Steam-artiges Profil (Phase 7) ===== */
   .pf-banner { height:92px; border-radius:var(--r); background:linear-gradient(120deg,var(--accent),var(--accent-2)); }
-  .pf-head { display:flex; align-items:flex-end; gap:14px; margin:-42px 0 10px; padding:0 2px; }
-  .pf-avatar { width:76px; height:76px; border-radius:20px; border:3px solid var(--surface); background:var(--surface-2); display:flex; align-items:center; justify-content:center; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:1.7rem; color:var(--accent); flex-shrink:0; box-shadow:var(--shadow); }
-  .pf-head-main { padding-bottom:8px; min-width:0; }
+  .pf-head { display:flex; align-items:flex-start; gap:14px; margin:0 0 12px; padding:0 2px; }
+  .pf-avatar { width:76px; height:76px; margin-top:-38px; border-radius:20px; border:3px solid var(--surface); background:var(--surface-2); display:flex; align-items:center; justify-content:center; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:1.7rem; color:var(--accent); flex-shrink:0; box-shadow:var(--shadow); }
+  .pf-head-main { padding-top:8px; min-width:0; }
   .pf-head-main h3 { margin:0 0 5px; font-size:1.4rem; line-height:1.15; }
   .pf-head-main .msub { line-height:1.55; }
   .pf-xp { margin:2px 0 14px; }
@@ -517,6 +517,23 @@
   .pass-coins { text-align:center; flex-shrink:0; background:var(--gold-weak); border:1px solid transparent; border-radius:var(--r); padding:8px 14px; color:var(--gold); }
   .pass-coins b { font-family:'Space Grotesk',sans-serif; font-size:1.3rem; display:block; } .pass-coins small{ font-size:.68rem; text-transform:uppercase; letter-spacing:.06em; }
   .pass-group { min-width:0; }
+  /* ===== Phase 10: Feinschliff ===== */
+  html { scroll-behavior:smooth; }
+  @keyframes ttspin { to { transform:rotate(360deg); } }
+  .empty.loading { display:flex; align-items:center; justify-content:center; gap:10px; }
+  .empty.loading::before { content:''; width:18px; height:18px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:ttspin .7s linear infinite; flex-shrink:0; }
+  .empty { transition:border-color var(--trans); }
+  @keyframes ttshimmer { 100% { background-position:-200% 0; } }
+  .skel { background:linear-gradient(90deg,var(--surface-2) 25%,var(--surface-3) 37%,var(--surface-2) 63%); background-size:200% 100%; animation:ttshimmer 1.3s ease-in-out infinite; border-radius:var(--r-sm); }
+  .skel-card { height:250px; border-radius:var(--r-lg); }
+  button:active { transform:scale(.97); }
+  button.ghost:active, button.chip:active { transform:scale(.97); }
+  a:focus-visible, nav a:focus-visible, .subnav a:focus-visible, .chip:focus-visible, [tabindex]:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:8px; }
+  .mini-card:active, .post-card:active, .mp-listing:active, .collection-item:active { transform:scale(.995); }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; scroll-behavior:auto !important; }
+    .empty.loading::before { animation:ttspin 1s linear infinite; }
+  }
 </style>
 </head>
 <body>
@@ -531,6 +548,7 @@
     <form id="auth-form">
       <label>E-Mail<input type="email" id="auth-email" autocomplete="username" required /></label>
       <label>Passwort<input type="password" id="auth-password" autocomplete="current-password" required minlength="6" /></label>
+      <label>Benutzername <small style="color:var(--muted)">(fest – nur bei Registrierung)</small><input type="text" id="auth-username" autocomplete="off" maxlength="20" placeholder="z. B. TinyTokyo" /></label>
       <div class="row" style="gap:8px;margin-top:10px">
         <button type="submit" id="auth-login-btn" style="flex:1">Anmelden</button>
         <button type="button" id="auth-signup-btn" class="ghost" style="flex:1">Neu registrieren</button>
@@ -922,7 +940,7 @@
     <!-- Freunde -->
     <div id="community-friends" style="display:none">
       <div id="fr-requests"></div>
-      <div id="fr-list"><div class="empty">Lade Freunde…</div></div>
+      <div id="fr-list"><div class="empty loading">Lade Freunde…</div></div>
       <p class="msub" style="margin-top:10px">Neue Freunde findest du über die Profile anderer Sammler (z. B. im Chat oder bei Angeboten auf den Namen tippen → <b>➕ Freund</b>).</p>
     </div>
 
@@ -1595,6 +1613,15 @@
     <div id="post-detail"></div>
   </div>
 </div>
+<div class="modal-bg" id="uname-modal">
+  <div class="modal">
+    <h3>Wähle deinen Namen</h3>
+    <p class="msub">Dieser Name wird anderen Sammlern angezeigt und lässt sich später nicht mehr ändern.</p>
+    <div class="field"><label>Benutzername</label><input type="text" id="uname-in" maxlength="20" placeholder="z. B. TinyTokyo" autocomplete="off" /></div>
+    <div class="row" style="margin-top:8px"><button id="uname-save">Namen festlegen</button></div>
+    <p class="msub" id="uname-status" style="min-height:1.2em;margin:8px 0 0"></p>
+  </div>
+</div>
 <script src="lib/supabase.js"></script>
 <script src="config.js"></script>
 <script src="content.js"></script>
@@ -1674,6 +1701,7 @@ async function startAppAfterAuth() {
     try { await navigator.serviceWorker.register('sw.js'); } catch (e) { console.warn('Service Worker:', e); }
   }
   route();
+  ensureUsername();
   refreshUnread();
   autoRefreshPrices(); // laeuft im Hintergrund, blockiert den Start nicht
 }
@@ -1768,14 +1796,38 @@ document.getElementById('auth-forgot').addEventListener('click', async (e) => {
   tsReset();
 });
 authSignupBtnEl.addEventListener('click', async () => {
+  const uname = (document.getElementById('auth-username').value || '').trim();
+  if (!/^[A-Za-z0-9_]{3,20}$/.test(uname)) { authStatusEl.textContent = 'Bitte einen festen Benutzernamen wählen (3–20 Zeichen: Buchstaben, Zahlen, _).'; return; }
   if (tsMissing()) { authStatusEl.textContent = 'Bitte kurz die Sicherheitsprüfung unten abschließen.'; return; }
-  authStatusEl.textContent = 'Registriere…'; authLoginBtnEl.disabled = true; authSignupBtnEl.disabled = true;
+  authStatusEl.textContent = 'Prüfe Namen…'; authLoginBtnEl.disabled = true; authSignupBtnEl.disabled = true;
   try {
-    const data = await self.DB.signUp(authEmailEl.value.trim(), authPasswordEl.value, tsToken());
+    const free = await self.DB.nameAvailable(uname).catch(() => true);
+    if (!free) { authStatusEl.textContent = 'Der Name „' + uname + '" ist schon vergeben – bitte einen anderen wählen.'; return; }
+    authStatusEl.textContent = 'Registriere…';
+    const data = await self.DB.signUp(authEmailEl.value.trim(), authPasswordEl.value, tsToken(), uname);
     if (data && data.session) { await startAppAfterAuth(); }
     else { authStatusEl.textContent = 'Registriert! Falls eine Bestätigungsmail kommt, bitte bestätigen und dann anmelden.'; }
   } catch (err) { authStatusEl.textContent = err.message || 'Registrierung fehlgeschlagen.'; tsReset(); }
   finally { authLoginBtnEl.disabled = false; authSignupBtnEl.disabled = false; }
+});
+async function ensureUsername() {
+  let name = '';
+  try { name = (await self.DB.getSetting('displayName')) || ''; } catch { return; }
+  if (name && name.trim()) return;
+  const m = document.getElementById('uname-modal'); if (m) m.classList.add('open');
+}
+document.getElementById('uname-save') && document.getElementById('uname-save').addEventListener('click', async () => {
+  const v = (document.getElementById('uname-in').value || '').trim();
+  const st = document.getElementById('uname-status');
+  if (!/^[A-Za-z0-9_]{3,20}$/.test(v)) { st.textContent = '3–20 Zeichen: Buchstaben, Zahlen, Unterstrich.'; return; }
+  st.textContent = 'Prüfe…';
+  try {
+    const free = await self.DB.nameAvailable(v).catch(() => true);
+    if (!free) { st.textContent = 'Der Name ist schon vergeben.'; return; }
+    await self.DB.setSetting('displayName', v);
+    document.getElementById('uname-modal').classList.remove('open');
+    try { if (typeof loadCommunityProfile === 'function') loadCommunityProfile(); } catch {}
+  } catch (e) { st.textContent = e.message || 'Fehlgeschlagen.'; }
 });
 
 (async function initAuth() {
@@ -2846,7 +2898,7 @@ const POST_KINDS = { showcase:['🖼️','Showcase'], pulls:['🎉','Pulls'], de
 let postsKind = '', _posts = [];
 async function loadPosts() {
   await ensureMyUid().catch(()=>{});
-  const box = document.getElementById('posts-body'); box.innerHTML = '<div class="empty">Lade Beiträge…</div>';
+  const box = document.getElementById('posts-body'); box.innerHTML = '<div class="empty loading">Lade Beiträge…</div>';
   try { _posts = await self.DB.listPosts(postsKind || undefined); }
   catch (e) { box.innerHTML = `<div class="empty">${escapeHtml(e.message||'Konnte Beiträge nicht laden. Wurde supabase-community-13.sql ausgeführt?')}</div>`; return; }
   if (!_posts.length) { box.innerHTML = '<div class="empty">Noch keine Beiträge – erstelle den ersten mit „+ Beitrag".</div>'; return; }
@@ -2876,7 +2928,7 @@ document.getElementById('posts-body')?.addEventListener('click', async e => {
 async function openPostDetail(id) {
   await ensureMyUid().catch(()=>{});
   document.getElementById('post-modal').classList.add('open');
-  const box = document.getElementById('post-detail'); box.innerHTML = '<div class="empty">Lade…</div>';
+  const box = document.getElementById('post-detail'); box.innerHTML = '<div class="empty loading">Lade…</div>';
   let data; try { data = await self.DB.getPost(id); } catch (e) { box.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; return; }
   const p = data.post; if (!p) { box.innerHTML = '<div class="empty">Beitrag nicht gefunden.</div>'; return; }
   const k = POST_KINDS[p.kind] || ['📌', p.kind]; const flag = countryFlag(p.author_country);
@@ -2957,7 +3009,7 @@ function myOwnedKeys() {
 }
 async function loadSeeking() {
   const el = document.getElementById('seeking-list');
-  el.innerHTML = '<div class="empty">Lade Gesuche…</div>';
+  el.innerHTML = '<div class="empty loading">Lade Gesuche…</div>';
   try { seekingItems = await self.DB.listSeeking(); }
   catch (e) { el.innerHTML = `<div class="empty">${escapeHtml(e.message || 'Konnte Gesuche nicht laden. Wurde supabase-community-10.sql ausgeführt?')}</div>`; return; }
   renderSeeking();
@@ -3080,7 +3132,7 @@ let friendsCache = [];
 async function loadFriends() {
   const listEl = document.getElementById('fr-list');
   const reqEl = document.getElementById('fr-requests');
-  listEl.innerHTML = '<div class="empty">Lade Freunde…</div>'; reqEl.innerHTML = '';
+  listEl.innerHTML = '<div class="empty loading">Lade Freunde…</div>'; reqEl.innerHTML = '';
   await ensureMyUid();
   try { friendsCache = await self.DB.listFriends(); }
   catch (e) { listEl.innerHTML = `<div class="empty">${escapeHtml(e.message||'Konnte Freunde nicht laden. Wurde die neue SQL-Datei ausgeführt?')}</div>`; return; }
@@ -3143,7 +3195,7 @@ async function enterChat() {
   await ensureMyUid();
   teardownChat();
   const log = document.getElementById('chat-log');
-  log.innerHTML = '<div class="empty">Lade Nachrichten…</div>';
+  log.innerHTML = '<div class="empty loading">Lade Nachrichten…</div>';
   let msgs = [];
   try { msgs = await self.DB.listChat(chatRoom); }
   catch (e) { log.innerHTML = `<div class="empty">${escapeHtml(e.message||'Konnte Chat nicht laden. Wurde die neue SQL-Datei ausgeführt?')}</div>`; return; }
@@ -3191,7 +3243,7 @@ const FORUM_CAT_LABEL = { general:'Allgemein', pokemon:'Pokémon', magic:'Magic'
 async function loadForum() {
   await ensureMyUid();
   const box = document.getElementById('forum-body');
-  box.innerHTML = '<div class="empty">Lade Themen…</div>';
+  box.innerHTML = '<div class="empty loading">Lade Themen…</div>';
   let threads = [];
   try { threads = await self.DB.listThreads(forumCat); }
   catch (e) { box.innerHTML = `<div class="empty">${escapeHtml(e.message||'Konnte Forum nicht laden. Wurde die neue SQL-Datei ausgeführt?')}</div>`; return; }
@@ -3235,7 +3287,7 @@ document.getElementById('forum-body').addEventListener('click', e=>{
 });
 async function openThread(id) {
   const box = document.getElementById('forum-body');
-  box.innerHTML = '<div class="empty">Lade Thema…</div>';
+  box.innerHTML = '<div class="empty loading">Lade Thema…</div>';
   await ensureMyUid();
   let data;
   try { data = await self.DB.getThread(id); } catch (e) { box.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; return; }
@@ -3274,7 +3326,7 @@ async function openThread(id) {
 async function loadCommunity() {
   refreshUnread();
   const el = document.getElementById('community-list');
-  el.innerHTML = '<div class="empty">Lade Angebote…</div>';
+  el.innerHTML = '<div class="empty loading">Lade Angebote…</div>';
   try {
     const [r, wr] = await Promise.all([fetch('api/market'), fetch('api/wishlist')]);
     const d = await r.json();
@@ -3469,7 +3521,7 @@ async function refreshUnread() {
 async function loadInbox(targetId) {
   targetId = targetId || 'community-inbox';
   const el = document.getElementById(targetId);
-  el.innerHTML = '<div class="empty">Lade Nachrichten…</div>';
+  el.innerHTML = '<div class="empty loading">Lade Nachrichten…</div>';
   let items = [];
   try {
     const r = await fetch('api/messages');
@@ -3564,7 +3616,7 @@ let lastTrades = [];
 let myFbTrades = new Set();
 async function loadTrades() {
   const el = document.getElementById('community-trades');
-  el.innerHTML = '<div class="empty">Lade Trades…</div>';
+  el.innerHTML = '<div class="empty loading">Lade Trades…</div>';
   let items = [];
   try {
     const [r, fr] = await Promise.all([fetch('api/trades'), fetch('api/trades/feedback-mine')]);
@@ -3691,7 +3743,7 @@ document.getElementById('fb-del').addEventListener('click', async () => {
 // ---- Punkte-Rangliste ----
 async function loadBoard() {
   const el = document.getElementById('community-board');
-  el.innerHTML = '<div class="empty">Lade Rangliste…</div>';
+  el.innerHTML = '<div class="empty loading">Lade Rangliste…</div>';
   let rows = [];
   try {
     const r = await fetch('api/leaderboard');
@@ -3726,6 +3778,7 @@ async function loadCommunityProfile() {
     const fg = await (await fetch('api/settings/favGames')).json();
     const ct = await (await fetch('api/settings/collectorType')).json();
     if (n && n.value != null) document.getElementById('cm-name').value = n.value;
+    { const _nm = document.getElementById('cm-name'); if (_nm) { const has = !!(_nm.value && _nm.value.trim()); _nm.readOnly = has; _nm.title = has ? 'Dein Name ist dauerhaft festgelegt.' : ''; _nm.style.opacity = has ? '.7' : ''; } }
     if (k && k.value != null) document.getElementById('cm-contact').value = k.value;
     if (c && c.value != null) document.getElementById('cm-country').value = c.value;
     if (b && b.value != null) document.getElementById('cm-bio').value = b.value;

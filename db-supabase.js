@@ -33,10 +33,19 @@
   }
 
   // ---- Auth --------------------------------------------------------------
-  async function signUp(email, password, captchaToken) {
-    const { data, error } = await getClient().auth.signUp({ email, password, options: captchaToken ? { captchaToken } : undefined });
+  async function signUp(email, password, captchaToken, username) {
+    const options = {};
+    if (captchaToken) options.captchaToken = captchaToken;
+    if (username) options.data = { username };
+    const { data, error } = await getClient().auth.signUp({ email, password, options: Object.keys(options).length ? options : undefined });
     if (error) throw new Error(error.message);
     return data;
+  }
+  // Ist ein Anzeigename noch frei? (RPC, auch ohne Login aufrufbar)
+  async function nameAvailable(name) {
+    const { data, error } = await getClient().rpc('name_available', { p_name: name });
+    if (error) throw new Error(error.message);
+    return !!data;
   }
   async function signIn(email, password, captchaToken) {
     const { data, error } = await getClient().auth.signInWithPassword({ email, password, options: captchaToken ? { captchaToken } : undefined });
@@ -803,7 +812,7 @@
     joinPresence, leaveChannel,
     listChat, sendChat, deleteChat, subscribeChat,
     listThreads, getThread, createThread, createPost, deleteThread, deletePost,
-    init, signUp, signIn, signOut, getSession, onAuthChange, resetPassword, updatePassword,
+    init, signUp, nameAvailable, signIn, signOut, getSession, onAuthChange, resetPassword, updatePassword,
     getSetting, setSetting, listMarket, listSeeking, listCardComments, addCardComment, deleteCardComment,
     listPosts, getPost, createPost, deletePost, addPostComment, deletePostComment, togglePostLike,
     listMessages, unreadMessages, sendMessage, markMessagesRead, deleteMessage, leaderboard,
