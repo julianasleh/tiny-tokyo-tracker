@@ -430,6 +430,34 @@
   .foot-hours-row .muted { color:var(--muted); }
   .foot-news { margin:0; padding-left:16px; color:var(--muted); font-size:.84rem; } .foot-news li{ margin:3px 0; }
   .foot-legal { margin-top:22px; padding-top:16px; border-top:1px solid var(--border); text-align:center; color:var(--muted); font-size:.82rem; }
+  /* ===== Marktplatz-Listings (Phase 3) ===== */
+  .mp-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:16px; }
+  .mp-listing { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); overflow:hidden; cursor:pointer; box-shadow:var(--shadow-sm); transition:transform var(--trans),box-shadow var(--trans),border-color var(--trans); display:flex; flex-direction:column; }
+  .mp-listing:hover { transform:translateY(-4px); box-shadow:var(--shadow-lg); border-color:var(--border-strong); }
+  .mpl-img { position:relative; background:#0a0c10; }
+  .mpl-img img, .mpl-img .mpl-ph { width:100%; aspect-ratio:5/7; object-fit:contain; display:flex; align-items:center; justify-content:center; font-size:2rem; }
+  .mpl-flag { position:absolute; top:9px; right:9px; background:var(--surface); border:1px solid var(--border); border-radius:999px; padding:2px 9px; font-size:.72rem; font-weight:700; box-shadow:var(--shadow-sm); }
+  .mpl-flag.mine { color:var(--accent); }
+  .mpl-body { padding:12px 13px 13px; display:flex; flex-direction:column; gap:3px; flex:1; }
+  .mpl-name { font-weight:600; font-size:.9rem; line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .mpl-sub { color:var(--muted); font-size:.74rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .mpl-price { color:var(--gold); font-weight:800; font-size:1.15rem; margin-top:6px; font-variant-numeric:tabular-nums; } .mpl-price small{ color:var(--muted); font-weight:400; font-size:.62rem; }
+  .mpl-seller { color:var(--muted); font-size:.74rem; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .mpl-modal { max-width:840px; width:94%; position:relative; padding:0; overflow:hidden; }
+  .mpl-detail { display:grid; grid-template-columns:1fr 330px; }
+  .mpl-left { background:#0a0c10; display:flex; align-items:center; justify-content:center; padding:24px; }
+  .mpl-big { width:100%; max-width:300px; border-radius:var(--r); cursor:zoom-in; box-shadow:var(--shadow-lg); aspect-ratio:5/7; object-fit:contain; }
+  .mpl-right { padding:22px 22px 24px; max-height:86vh; overflow-y:auto; }
+  .mpl-head h3 { font-family:'Space Grotesk',sans-serif; margin:10px 0 4px; font-size:1.35rem; }
+  .mpl-attrs { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0; }
+  .mpl-attr { background:var(--surface-2); border:1px solid var(--border); border-radius:999px; padding:5px 12px; font-size:.76rem; color:var(--muted); } .mpl-attr b{ color:var(--text); }
+  .mpl-buy { position:sticky; bottom:0; background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:16px; margin-top:10px; box-shadow:var(--shadow); }
+  .mpl-buy-price { font-family:'Space Grotesk',sans-serif; font-size:1.9rem; font-weight:800; color:var(--gold); font-variant-numeric:tabular-nums; line-height:1.1; }
+  .mpl-buy-sub { color:var(--muted); font-size:.8rem; margin-top:2px; }
+  .mpl-seller-card { background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-sm); padding:11px 12px; margin:13px 0; cursor:pointer; transition:border-color var(--trans); }
+  .mpl-seller-card:hover { border-color:var(--accent); }
+  .mpl-sc-name { font-size:.9rem; } .mpl-sc-meta { color:var(--muted); font-size:.76rem; margin-top:3px; }
+  @media(max-width:640px){ .mpl-detail{ grid-template-columns:1fr; } .mpl-left{ padding:16px; } .mpl-right{ max-height:none; } .mpl-buy{ position:static; } }
 </style>
 </head>
 <body>
@@ -760,6 +788,14 @@
 
   <!-- ============ MARKTPLATZ (Angebote / Gesuche / Trades) ============ -->
   <section class="view" id="view-marktplatz">
+    <div class="hero">
+      <div>
+        <div class="label">Marktplatz · <span id="cm-count">0</span> Angebote</div>
+        <div class="value" style="font-size:1.7rem">Kaufen · Verkaufen · Tauschen</div>
+        <div class="breakdown">Angebote und Gesuche aller Sammler. Eigene Karten bietest du in der Sammlung über ✎ an.</div>
+      </div>
+      <div class="actions"><button class="ghost" id="cm-reload">Neu laden</button></div>
+    </div>
     <div class="filterbar row">
       <div class="row" id="mp-tabs">
         <button class="chip active" data-tab="angebote">Angebote</button>
@@ -777,6 +813,9 @@
       </div>
       <span class="ci-spacer"></span>
       <input type="text" id="cm-search" placeholder="Angebote durchsuchen…" style="max-width:220px" />
+      <select id="cm-sort" title="Sortierung"><option value="relevanz">Relevanz</option><option value="preis-asc">Preis ↑</option><option value="preis-desc">Preis ↓</option><option value="neu">Neueste</option></select>
+      <select id="cm-cond" title="Zustand"><option value="">Zustand: alle</option><option value="NM">NM</option><option value="EX">EX</option><option value="GD">GD</option><option value="LP">LP</option><option value="PL">PL</option><option value="PO">PO</option></select>
+      <input type="text" id="cm-maxprice" placeholder="max €" style="max-width:92px" />
     </div>
     <div id="community-list"></div>
     <div id="mp-seeking" style="display:none">
@@ -800,11 +839,10 @@
   <section class="view" id="view-community">
     <div class="hero">
       <div>
-        <div class="label">Community · Karten zum Verkauf</div>
-        <div class="value" id="cm-count">0</div>
-        <div class="breakdown">Angebote aller Nutzer. Deine Karten bietest du in der Sammlung über ✎ an – Anzeigename &amp; Kontakt stellst du in den Einstellungen ein.</div>
+        <div class="label">Community</div>
+        <div class="value" style="font-size:1.7rem">Freunde · Chat · Forum</div>
+        <div class="breakdown">Vernetze dich mit anderen Sammlern, chatte in Echtzeit und tausch dich im Forum aus.</div>
       </div>
-      <div class="actions"><button class="ghost" id="cm-reload">Neu laden</button></div>
     </div>
     <div class="filterbar row">
       <div class="row" id="cm-tabs">
@@ -1442,6 +1480,12 @@
       <button class="ghost" id="seek-close">Abbrechen</button>
     </div>
     <p class="msub" id="seek-status" style="min-height:1.2em;margin:8px 0 0"></p>
+  </div>
+</div>
+<div class="modal-bg" id="mp-listing-modal">
+  <div class="modal mpl-modal">
+    <button class="detail-close" id="mpl-close" style="z-index:2" title="Schließen">✕</button>
+    <div class="mpl-detail" id="mpl-detail"></div>
   </div>
 </div>
 <script src="lib/supabase.js"></script>
@@ -2996,44 +3040,111 @@ function isWishMatch(c) { return !c.is_mine && c.external_id && wishKeys.has(c.g
 
 function renderCommunity() {
   const term = document.getElementById('cm-search').value.trim().toLowerCase();
+  const cond = (document.getElementById('cm-cond') || {}).value || '';
+  const sort = (document.getElementById('cm-sort') || {}).value || 'relevanz';
+  const maxRaw = ((document.getElementById('cm-maxprice') || {}).value || '').trim().replace(',', '.');
+  const maxP = maxRaw ? parseFloat(maxRaw) : null;
+  const eff = c => (c.asking_price ?? c.price_current ?? null);
   const matches = marketItems.filter(isWishMatch);
   let list = marketItems
     .filter(c => !cmGame || c.game === cmGame)
+    .filter(c => !cond || (c.condition || '') === cond)
+    .filter(c => maxP == null || !Number.isFinite(maxP) || (eff(c) != null && eff(c) <= maxP))
     .filter(c => !term || [c.name, c.set_name, c.seller_name].filter(Boolean).join(' ').toLowerCase().includes(term));
   if (cmWishOnly) list = list.filter(isWishMatch);
+  if (sort === 'preis-asc') list = [...list].sort((a, b) => (eff(a) ?? 1e12) - (eff(b) ?? 1e12));
+  else if (sort === 'preis-desc') list = [...list].sort((a, b) => (eff(b) ?? -1) - (eff(a) ?? -1));
+  else if (sort === 'neu') list = [...list].sort((a, b) => (b.id || 0) - (a.id || 0));
+  else list = [...list].sort((a, b) => (isWishMatch(b) ? 1 : 0) - (isWishMatch(a) ? 1 : 0));
   document.getElementById('cm-count').textContent = list.length;
   const el = document.getElementById('community-list');
-  const banner = matches.length ? `<div class="filterbar row" style="border-color:#2f7d52">
-      <span>🎯 <b>${matches.length}</b> Angebot${matches.length===1?' passt':'e passen'} zu deiner Wunschliste!</span>
+  const banner = matches.length ? `<div class="filterbar row" style="border-color:var(--pos)">
+      <span>🎯 <b>${matches.length}</b> Angebot${matches.length === 1 ? ' passt' : 'e passen'} zu deiner Wunschliste!</span>
       <span class="ci-spacer"></span>
-      <button class="chip ${cmWishOnly?'active':''}" id="cm-wishonly">${cmWishOnly?'alle zeigen':'nur diese zeigen'}</button>
+      <button class="chip ${cmWishOnly ? 'active' : ''}" id="cm-wishonly">${cmWishOnly ? 'alle zeigen' : 'nur diese zeigen'}</button>
     </div>` : '';
   if (!list.length) {
     el.innerHTML = banner + '<div class="empty">Keine Angebote gefunden. Eigene Karten anbieten: Sammlung → ✎ → „Zum Verkauf anbieten".</div>';
     bindWishOnly();
     return;
   }
-  el.innerHTML = banner + list.map(c => {
-    const cur = c.currency || 'EUR';
-    const price = c.asking_price != null ? fmt(c.asking_price, cur)
-      : (c.price_current != null ? `${fmt(c.price_current, cur)} <small style="color:var(--muted)">Marktwert</small>` : 'Preis auf Anfrage');
-    const ref = refText({ setCode: c.set_code, number: c.number });
-    const cflag = countryFlag(c.seller_country);
-    return `
-    <div class="collection-item" data-sid="${escapeHtml(c.seller_id||'')}" data-sname="${escapeHtml(c.seller_name||'Sammler')}" data-cname="${escapeHtml(c.name||'')}" data-cid="${c.id}" data-game="${escapeHtml(c.game||'')}" data-price="${c.asking_price ?? c.price_current ?? ''}" data-cur="${escapeHtml(c.currency||'EUR')}">
-      ${c.image_url ? `<img src="${c.image_url}" alt="" loading="lazy" data-act="zoom" style="cursor:zoom-in" title="Bild vergrößern" />` : ''}
-      <div class="ci-main">
-        <div class="ci-name">${escapeHtml(c.name)}${c.quantity>1?` ×${c.quantity}`:''}${c.is_mine?'<span class="badge-target">dein Angebot</span>':''}${isWishMatch(c)?'<span class="badge-target">🎯 Wunschliste</span>':''}</div>
-        <div class="ci-sub">${GAME_LABEL[c.game]||c.game} · <span class="flag">${flagFor(c.language)}</span>${escapeHtml(c.set_name||'')}${ref?` · <b>${escapeHtml(ref)}</b>`:''} · Zustand ${escapeHtml(c.condition||'–')}</div>
-        <div class="ci-sub">von <span data-act="profile" data-uid="${escapeHtml(c.seller_id||'')}" style="cursor:pointer;border-bottom:1px dotted var(--muted)" title="Profil ansehen">${cflag?cflag+' ':''}<b>${escapeHtml(c.seller_name||'Sammler')}</b>${c.seller_verified?' 🛡️':''}${c.seller_fb_count?` <span style="color:var(--gold)">★ ${Number(c.seller_fb_avg).toFixed(1)}</span> <small>(${c.seller_fb_count} Feedback)</small>`:(c.seller_rating!=null?` <span style="color:var(--gold)">★ ${Number(c.seller_rating).toFixed(1)}</span> <small>(${c.seller_rating_count})</small>`:'')}${c.seller_trades?` · <small title="abgeschlossene Trades">🔄 ${c.seller_trades}</small>`:''}${c.seller_quote!=null&&c.seller_trades>=3?` <small style="color:#5bd08a" title="Erfolgsquote">✔ ${Math.round(c.seller_quote)} %</small>`:''}</span></div>
-      </div>
-      <div class="ci-spacer"></div>
-      <div class="ci-prices"><div class="ci-price" style="cursor:default">${price}</div></div>
-      ${(!c.is_mine && c.seller_id) ? '<button class="wtocoll" data-act="trade" title="Kauf/Tausch anfragen – der Anbieter kann annehmen oder ablehnen">🔄 Trade</button><button class="wtocoll" data-act="msg" title="Dem Verkäufer eine Nachricht schreiben">✉</button>' : ''}
-    </div>`;
-  }).join('');
+  el.innerHTML = banner + '<div class="mp-grid">' + list.map(mpListingCard).join('') + '</div>';
   bindWishOnly();
 }
+function mpListingCard(c) {
+  const cur = c.currency || 'EUR';
+  const priceHtml = c.asking_price != null ? fmt(c.asking_price, cur) : (c.price_current != null ? fmt(c.price_current, cur) : 'VB');
+  const priceLabel = c.asking_price == null && c.price_current != null ? '<small>Marktwert</small>' : '';
+  const cflag = countryFlag(c.seller_country);
+  const rating = c.seller_fb_count ? `★ ${Number(c.seller_fb_avg).toFixed(1)}` : (c.seller_rating != null ? `★ ${Number(c.seller_rating).toFixed(1)}` : '');
+  return `<div class="mp-listing" data-cid="${c.id}">
+    <div class="mpl-img">
+      ${c.image_url ? `<img src="${c.image_url}" loading="lazy" alt="" />` : '<div class="mpl-ph">🃏</div>'}
+      <span class="tag ${escapeHtml(c.game || '')}">${escapeHtml(GAME_LABEL[c.game] || c.game || '')}</span>
+      ${c.is_mine ? '<span class="mpl-flag mine">Dein</span>' : (isWishMatch(c) ? '<span class="mpl-flag">🎯</span>' : '')}
+    </div>
+    <div class="mpl-body">
+      <div class="mpl-name" title="${escapeHtml(c.name || '')}">${escapeHtml(c.name || '')}${c.quantity > 1 ? ` ×${c.quantity}` : ''}</div>
+      <div class="mpl-sub">${escapeHtml(c.set_name || '')} · ${escapeHtml(c.condition || '–')}</div>
+      <div class="mpl-price">${priceHtml} ${priceLabel}</div>
+      <div class="mpl-seller">${cflag ? cflag + ' ' : ''}${escapeHtml(c.seller_name || 'Sammler')}${c.seller_verified ? ' 🛡️' : ''}${rating ? ` · <span style="color:var(--gold)">${rating}</span>` : ''}</div>
+    </div>
+  </div>`;
+}
+let currentListing = null;
+function closeListing() { document.getElementById('mp-listing-modal').classList.remove('open'); currentListing = null; }
+function openListingModal(c) {
+  currentListing = c;
+  const cur = c.currency || 'EUR';
+  const ref = refText({ setCode: c.set_code, number: c.number });
+  const cflag = countryFlag(c.seller_country);
+  const priceMain = c.asking_price != null ? fmt(c.asking_price, cur) : (c.price_current != null ? fmt(c.price_current, cur) : 'Preis auf Anfrage');
+  const priceSub = (c.asking_price != null && c.price_current != null) ? `Marktwert ${fmt(c.price_current, cur)}` : (c.asking_price == null && c.price_current != null ? 'Richtwert – kein Festpreis' : '');
+  const rating = c.seller_fb_count ? `★ ${Number(c.seller_fb_avg).toFixed(2)} · ${c.seller_fb_count} Feedback` : (c.seller_rating != null ? `★ ${Number(c.seller_rating).toFixed(1)} · ${c.seller_rating_count} Bew.` : 'Noch keine Bewertung');
+  const quote = (c.seller_quote != null && c.seller_trades >= 3) ? `✔ ${Math.round(c.seller_quote)} % erfolgreiche Trades` : '';
+  const buy = (!c.is_mine && c.seller_id) ? `
+        <button id="mpl-trade" style="width:100%">🔄 Kauf / Tausch anfragen</button>
+        <button class="ghost" id="mpl-msg" style="width:100%;margin-top:8px">✉ Nachricht an Verkäufer</button>` : '<div class="msub" style="margin-top:6px">Das ist dein eigenes Angebot.</div>';
+  document.getElementById('mpl-detail').innerHTML = `
+    <div class="mpl-left">
+      ${c.image_url ? `<img src="${c.image_url.replace('/low.webp', '/high.webp')}" class="mpl-big" alt="" data-act="zoom" />` : '<div class="mpl-big mpl-ph" style="display:flex;align-items:center;justify-content:center;font-size:3rem">🃏</div>'}
+    </div>
+    <div class="mpl-right">
+      <div class="mpl-head">
+        <span class="tag ${escapeHtml(c.game || '')}" style="position:static;display:inline-block">${escapeHtml(GAME_LABEL[c.game] || c.game || '')}</span>
+        <h3>${escapeHtml(c.name || '')}</h3>
+        <div class="msub">${escapeHtml(c.set_name || '')}${ref ? ` · <b>${escapeHtml(ref)}</b>` : ''} · <span class="flag">${flagFor(c.language)}</span>${escapeHtml((c.language || '').toUpperCase())}</div>
+      </div>
+      <div class="mpl-attrs">
+        <span class="mpl-attr">Zustand <b>${escapeHtml(c.condition || '–')}</b></span>
+        ${c.rarity ? `<span class="mpl-attr">Seltenheit <b>${escapeHtml(c.rarity)}</b></span>` : ''}
+        <span class="mpl-attr">Menge <b>${c.quantity || 1}</b></span>
+      </div>
+      <div class="mpl-buy">
+        <div class="mpl-buy-price">${priceMain}</div>
+        ${priceSub ? `<div class="mpl-buy-sub">${priceSub}</div>` : ''}
+        ${c.price_low != null ? `<div class="mpl-buy-sub">ab ${fmt(c.price_low, cur)}</div>` : ''}
+        <div class="mpl-seller-card" data-act="profile" data-uid="${escapeHtml(c.seller_id || '')}">
+          <div class="mpl-sc-name">${cflag ? cflag + ' ' : ''}<b>${escapeHtml(c.seller_name || 'Sammler')}</b>${c.seller_verified ? ' 🛡️' : ''}</div>
+          <div class="mpl-sc-meta">${rating}${c.seller_trades ? ` · 🔄 ${c.seller_trades} Trades` : ''}</div>
+          ${quote ? `<div class="mpl-sc-meta" style="color:var(--pos)">${quote}</div>` : ''}
+        </div>
+        ${buy}
+        ${c.cardmarket_url ? `<a class="cm-link" href="${c.cardmarket_url}" target="_blank" rel="noopener" style="display:block;margin-top:10px">Auf Cardmarket vergleichen ↗</a>` : ''}
+      </div>
+    </div>`;
+  const tb = document.getElementById('mpl-trade');
+  if (tb) tb.onclick = () => { closeListing(); openTradeModal({ sid: c.seller_id, sname: c.seller_name, cname: c.name, cid: c.id, game: c.game, price: (c.asking_price ?? c.price_current ?? ''), cur }); };
+  const mb = document.getElementById('mpl-msg');
+  if (mb) mb.onclick = () => { closeListing(); openMsgModal(c.seller_id, c.seller_name, c.name); };
+  document.getElementById('mp-listing-modal').classList.add('open');
+}
+document.getElementById('mpl-close').addEventListener('click', closeListing);
+document.getElementById('mp-listing-modal').addEventListener('click', e => {
+  if (e.target.id === 'mp-listing-modal') { closeListing(); return; }
+  const z = e.target.closest('[data-act="zoom"]'); if (z) { openZoom(z.src); return; }
+  const p = e.target.closest('[data-act="profile"]'); if (p && p.dataset.uid) { closeListing(); openProfile(p.dataset.uid); }
+});
 function bindWishOnly() {
   const wb = document.getElementById('cm-wishonly');
   if (wb) wb.addEventListener('click', ()=>{ cmWishOnly = !cmWishOnly; renderCommunity(); });
@@ -3050,14 +3161,9 @@ function openZoom(src) {
   z.style.display = 'flex';
 }
 document.getElementById('community-list').addEventListener('click', e=>{
-  const zoomImg = e.target.closest('[data-act="zoom"]');
-  if (zoomImg) { openZoom(zoomImg.src.replace('/low.webp', '/high.webp')); return; }
-  const prof = e.target.closest('[data-act="profile"]');
-  if (prof && prof.dataset.uid) { openProfile(prof.dataset.uid); return; }
-  const item = e.target.closest('.collection-item'); if (!item) return;
-  const act = e.target.closest('[data-act]')?.dataset.act;
-  if (act === 'msg') openMsgModal(item.dataset.sid, item.dataset.sname, item.dataset.cname);
-  else if (act === 'trade') openTradeModal(item.dataset);
+  const item = e.target.closest('.mp-listing'); if (!item) return;
+  const c = marketItems.find(x => String(x.id) === String(item.dataset.cid));
+  if (c) openListingModal(c);
 });
 document.getElementById('cm-chips').addEventListener('click', e=>{
   const chip = e.target.closest('.chip'); if(!chip) return;
@@ -3066,6 +3172,8 @@ document.getElementById('cm-chips').addEventListener('click', e=>{
   renderCommunity();
 });
 document.getElementById('cm-search').addEventListener('input', renderCommunity);
+['cm-sort','cm-cond'].forEach(id=>{ const e=document.getElementById(id); if(e) e.addEventListener('change', renderCommunity); });
+{ const mp=document.getElementById('cm-maxprice'); if(mp) mp.addEventListener('input', renderCommunity); }
 document.getElementById('cm-reload').addEventListener('click', loadCommunity);
 
 // ---- Nachrichten (Postfach) ----
