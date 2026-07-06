@@ -507,6 +507,20 @@
   async function listSeeking() {
     return must(await getClient().from('seeking_cards').select('*').order('game', { ascending: true }));
   }
+  // --- Karten-Kommentare (Detailseite) ---------------------------------------
+  async function listCardComments(game, ext) {
+    return must(await getClient().from('card_comments').select('*').eq('game', game).eq('external_id', ext).order('created_at', { ascending: false }).limit(100));
+  }
+  async function addCardComment(game, ext, body) {
+    const uid = await requireUserId();
+    const { data, error } = await getClient().from('card_comments').insert({ game, external_id: ext, user_id: uid, body }).select().single();
+    if (error) throw new Error(error.message);
+    return data;
+  }
+  async function deleteCardComment(id) {
+    const { error } = await getClient().from('card_comments').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  }
 
   // --- Nachrichten -----------------------------------------------------------
   async function listMessages() {
@@ -754,7 +768,7 @@
     listChat, sendChat, deleteChat, subscribeChat,
     listThreads, getThread, createThread, createPost, deleteThread, deletePost,
     init, signUp, signIn, signOut, getSession, onAuthChange, resetPassword, updatePassword,
-    getSetting, setSetting, listMarket, listSeeking,
+    getSetting, setSetting, listMarket, listSeeking, listCardComments, addCardComment, deleteCardComment,
     listMessages, unreadMessages, sendMessage, markMessagesRead, deleteMessage, leaderboard,
     getProfile, listRatings, rateUser, deleteRating,
     listTrades, createTrade, updateTrade, openTradesCount,

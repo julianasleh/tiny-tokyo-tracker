@@ -298,7 +298,7 @@
   .info-card th { color:var(--muted); font-weight:600; }
   @media (max-width:560px){ .ci-sub .long{display:none;} table.list .hide-sm{display:none;} }
   /* Detailansicht */
-  .detail-modal { max-width:700px; width:92%; position:relative; }
+  .detail-modal { max-width:900px; width:94%; position:relative; }
   .detail-close { position:absolute; top:12px; right:14px; background:transparent; color:var(--muted); font-size:1.1rem; padding:5px 9px; box-shadow:none; }
   .detail-close:hover { color:var(--text); background:var(--surface-2); transform:none; }
   .detail-grid { display:flex; gap:22px; }
@@ -458,6 +458,22 @@
   .mpl-seller-card:hover { border-color:var(--accent); }
   .mpl-sc-name { font-size:.9rem; } .mpl-sc-meta { color:var(--muted); font-size:.76rem; margin-top:3px; }
   @media(max-width:640px){ .mpl-detail{ grid-template-columns:1fr; } .mpl-left{ padding:16px; } .mpl-right{ max-height:none; } .mpl-buy{ position:static; } }
+  /* ===== Karten-Detail Landing (Phase 4) ===== */
+  #dt-sections { margin-top:20px; }
+  .dt-actions { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+  .dt-secgrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; }
+  .dt-card { background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r); padding:14px 16px; }
+  .dt-stat { display:flex; flex-direction:column; gap:3px; }
+  .dt-stat-k { font-size:.72rem; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); }
+  .dt-stat-v { font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:1.15rem; }
+  .dt-sec { margin-top:20px; padding-top:16px; border-top:1px solid var(--border); }
+  .dt-sec h4 { font-family:'Space Grotesk',sans-serif; margin:0 0 12px; font-size:1rem; }
+  .dt-listing { display:flex; align-items:center; gap:10px; padding:10px 12px; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-sm); margin-bottom:7px; cursor:pointer; transition:border-color var(--trans); }
+  .dt-listing:hover { border-color:var(--accent); }
+  .dt-listing .dl-price { color:var(--gold); font-weight:800; margin-left:auto; font-variant-numeric:tabular-nums; }
+  .dt-comment { padding:10px 12px; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-sm); margin-bottom:8px; }
+  .dt-comment .dc-head { font-size:.78rem; color:var(--muted); margin-bottom:3px; }
+  .dt-comment .dc-body { white-space:pre-wrap; word-break:break-word; font-size:.9rem; }
 </style>
 </head>
 <body>
@@ -1381,6 +1397,7 @@
         <div id="dt-link"></div>
       </div>
     </div>
+    <div id="dt-sections"></div>
   </div>
 </div>
 
@@ -3727,8 +3744,129 @@ async function openDetail(raw, opts={}) {
     try { const d = await (await fetch('api/collection/'+opts.histId+'/history')).json();
       chartBox.innerHTML = sparklineSvg(d.history||[], c.currency); } catch {}
   }
+  renderCardLanding(c, raw);
   document.getElementById('detail-modal').classList.add('open');
 }
+let _dtSimilar = [];
+async function renderCardLanding(c, raw) {
+  const box = document.getElementById('dt-sections'); if (!box) return;
+  const game = c.game;
+  const ext = raw.externalId ?? raw.external_id ?? null;
+  const cur = c.currency || 'EUR';
+  await ensureMyUid().catch(()=>{});
+  let ownedQty = 0, ownedVal = 0;
+  for (const oc of (collectionCards || [])) if (oc.game === game && oc.external_id === ext) { ownedQty += (oc.quantity || 1); ownedVal += (oc.price_current ?? oc.price_at_add ?? 0) * (oc.quantity || 1); }
+  const inWish = (wishlistItems || []).find(w => w.game === game && w.external_id === ext);
+  box.innerHTML = `
+    <div class="dt-actions">
+      <button id="dt-wish" class="${inWish?'ghost':''}">${inWish?'♥ Auf Wunschliste':'♡ Auf Wunschliste'}</button>
+      <button class="ghost" id="dt-alert">🔔 Preisalarm${inWish && inWish.target_price!=null?' · '+fmt(inWish.target_price,cur):''}</button>
+    </div>
+    <div class="dt-secgrid">
+      <div class="dt-card"><div class="dt-stat"><span class="dt-stat-k">In deiner Sammlung</span><span class="dt-stat-v">${ownedQty?ownedQty+'× · '+fmt(ownedVal,cur):'—'}</span></div></div>
+      <div class="dt-card"><div class="dt-stat"><span class="dt-stat-k">Aktueller Wert</span><span class="dt-stat-v">${c.price!=null?fmt(c.price,cur):'—'}</span></div></div>
+    </div>
+    <div class="dt-sec"><h4>🛒 Angebote für diese Karte</h4><div id="dt-listings" class="msub">Lade…</div></div>
+    <div class="dt-sec"><h4>🃏 Ähnliche Karten</h4><div id="dt-similar" class="home-scroller"><span class="msub">Lade…</span></div></div>
+    <div class="dt-sec"><h4>💬 Kommentare</h4>
+      <form id="dt-comment-form" class="row" style="gap:8px" autocomplete="off"><input type="text" id="dt-comment-in" maxlength="2000" placeholder="Schreib etwas zu dieser Karte…" style="flex:1"/><button type="submit">Senden</button></form>
+      <div id="dt-comments" style="margin-top:10px"><span class="msub">Lade…</span></div>
+    </div>
+    <div class="dt-sec"><h4>🗂 Decks</h4><p class="msub">Deck-Listen mit dieser Karte kommen in einer späteren Version.</p></div>`;
+
+  const reloadWish = async () => { try { const d = await (await fetch('api/wishlist')).json(); wishlistItems = d.items || []; refreshWishCount(); } catch {} };
+  document.getElementById('dt-wish').onclick = async () => {
+    const w = (wishlistItems || []).find(x => x.game === game && x.external_id === ext);
+    try {
+      if (w) { await fetch('api/wishlist/' + w.id, { method: 'DELETE' }); }
+      else {
+        const payload = { game, externalId: ext, name: c.name, setName: c.setName, setCode: c.setCode, number: c.number, rarity: c.rarity, imageUrl: c.imageUrl, cardmarketUrl: c.url, language: c.lang || 'DE', cardmarketPrice: c.price, priceLow: c.low, priceTrend: c.trend, currency: cur };
+        await fetch('api/wishlist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      }
+      await reloadWish(); renderCardLanding(c, raw);
+    } catch (e) { alert(e.message || 'Fehlgeschlagen.'); }
+  };
+  document.getElementById('dt-alert').onclick = async () => {
+    let w = (wishlistItems || []).find(x => x.game === game && x.external_id === ext);
+    const curVal = w && w.target_price != null ? String(w.target_price).replace('.', ',') : '';
+    const inp = prompt('Preisalarm: benachrichtige mich, wenn der Wert diesen Betrag erreicht (leer = aus):', curVal);
+    if (inp === null) return;
+    const raw2 = inp.trim().replace(',', '.'); const val = raw2 === '' ? null : parseFloat(raw2);
+    try {
+      if (!w) {
+        const payload = { game, externalId: ext, name: c.name, setName: c.setName, setCode: c.setCode, number: c.number, rarity: c.rarity, imageUrl: c.imageUrl, cardmarketUrl: c.url, language: c.lang || 'DE', cardmarketPrice: c.price, priceLow: c.low, priceTrend: c.trend, currency: cur };
+        await fetch('api/wishlist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        await reloadWish(); w = (wishlistItems || []).find(x => x.game === game && x.external_id === ext);
+      }
+      if (w) await fetch('api/wishlist/' + w.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_price: (val != null && Number.isFinite(val) && val >= 0) ? val : null }) });
+      await reloadWish(); renderCardLanding(c, raw);
+    } catch (e) { alert(e.message || 'Fehlgeschlagen.'); }
+  };
+
+  // Angebote (Listings) für diese Karte
+  (async () => {
+    const box2 = document.getElementById('dt-listings');
+    try {
+      let items = marketItems;
+      if (!items || !items.length) { const d = await (await fetch('api/market')).json(); items = d.items || []; }
+      const ls = items.filter(x => x.game === game && x.external_id === ext);
+      if (!ls.length) { box2.innerHTML = '<span class="msub">Aktuell keine Angebote. Biete deine Karte in der Sammlung über ✎ an.</span>'; return; }
+      box2.innerHTML = ls.map(x => {
+        const cflag = countryFlag(x.seller_country); const pc = x.currency || 'EUR';
+        const price = x.asking_price != null ? fmt(x.asking_price, pc) : (x.price_current != null ? fmt(x.price_current, pc) : 'VB');
+        return `<div class="dt-listing" data-cid="${x.id}"><span>${cflag?cflag+' ':''}${escapeHtml(x.seller_name||'Sammler')}${x.seller_verified?' 🛡️':''} · <span class="msub">Zustand ${escapeHtml(x.condition||'–')}</span></span><span class="dl-price">${price}</span></div>`;
+      }).join('');
+      box2.querySelectorAll('.dt-listing').forEach(row => row.addEventListener('click', () => {
+        const x = ls.find(y => String(y.id) === row.dataset.cid); if (x) { closeDetail(); openListingModal(x); }
+      }));
+    } catch { box2.innerHTML = '<span class="msub">Angebote konnten nicht geladen werden.</span>'; }
+  })();
+
+  // Ähnliche Karten (Namenssuche)
+  (async () => {
+    const box3 = document.getElementById('dt-similar');
+    try {
+      const q = encodeURIComponent(c.name || '');
+      const d = await (await fetch(`api/search?game=${game}&q=${q}&lang=${encodeURIComponent(c.lang||'')}`)).json();
+      let res = (d.results || []).filter(r => (r.externalId ?? r.external_id) !== ext).slice(0, 12);
+      if (!res.length) { box3.innerHTML = '<span class="msub">Keine ähnlichen Karten gefunden.</span>'; return; }
+      _dtSimilar = res;
+      box3.innerHTML = res.map((r, i) => `<div class="mini-card" data-idx="${i}">
+        ${r.imageUrl ? `<img src="${r.imageUrl}" loading="lazy" alt=""/>` : '<div class="mc-ph">🃏</div>'}
+        <div class="mc-body"><div class="mc-name" title="${escapeHtml(r.name||'')}">${escapeHtml(r.name||'')}</div>
+        <div class="mc-sub">${escapeHtml(r.setName||r.set_name||'')}</div>
+        <div class="mc-price">${r.cardmarketPrice!=null?fmt(r.cardmarketPrice,r.currency||'EUR'):''}</div></div></div>`).join('');
+      box3.querySelectorAll('.mini-card').forEach(mc => mc.addEventListener('click', () => { const r = _dtSimilar[Number(mc.dataset.idx)]; if (r) openDetail(r); }));
+    } catch { box3.innerHTML = '<span class="msub">Ähnliche Karten konnten nicht geladen werden.</span>'; }
+  })();
+
+  // Kommentare
+  loadCardComments(game, ext);
+  const cf = document.getElementById('dt-comment-form');
+  if (cf) cf.onsubmit = async (e) => {
+    e.preventDefault();
+    const inp = document.getElementById('dt-comment-in'); const body = inp.value.trim(); if (!body) return;
+    inp.value = '';
+    try { await self.DB.addCardComment(game, ext, body); loadCardComments(game, ext); }
+    catch (err) { alert(err.message || 'Konnte Kommentar nicht senden. Wurde supabase-community-11.sql ausgeführt?'); inp.value = body; }
+  };
+}
+async function loadCardComments(game, ext) {
+  const box = document.getElementById('dt-comments'); if (!box) return;
+  let rows = [];
+  try { rows = await self.DB.listCardComments(game, ext); }
+  catch (e) { box.innerHTML = `<span class="msub">${escapeHtml(e.message||'Kommentare nicht verfügbar (SQL Teil 11 ausführen).')}</span>`; return; }
+  if (!rows.length) { box.innerHTML = '<span class="msub">Noch keine Kommentare – sei der Erste!</span>'; return; }
+  box.innerHTML = rows.map(m => {
+    const flag = countryFlag(m.author_country); const t = new Date(m.created_at).toLocaleString('de-DE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+    const del = (m.user_id === myUid) ? ` <span data-act="cc-del" data-id="${m.id}" style="cursor:pointer;color:var(--muted)" title="Löschen">✕</span>` : '';
+    return `<div class="dt-comment"><div class="dc-head">${flag?flag+' ':''}<b>${escapeHtml(m.author_name||'Sammler')}</b> · ${t}${del}</div><div class="dc-body">${escapeHtml(m.body)}</div></div>`;
+  }).join('');
+  box.querySelectorAll('[data-act="cc-del"]').forEach(x => x.addEventListener('click', async () => {
+    try { await self.DB.deleteCardComment(x.dataset.id); loadCardComments(game, ext); } catch (e) { alert(e.message); }
+  }));
+}
+function closeDetail() { document.getElementById('detail-modal').classList.remove('open'); }
 function closeDetail() { document.getElementById('detail-modal').classList.remove('open'); }
 document.getElementById('dt-close').addEventListener('click', closeDetail);
 document.getElementById('detail-modal').addEventListener('click', e=>{ if(e.target.id==='detail-modal') closeDetail(); });
