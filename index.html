@@ -66,6 +66,7 @@
     <a href="#/graded" data-sub="graded">Graded</a>
     <a href="#/verkauft" data-sub="verkauft">Verkauft <span class="count" id="sold-count"></span></a>
     <a href="#/wunschliste" data-sub="wunschliste">Wunschliste <span class="count" id="wish-count"></span></a>
+    <a href="#/collections" data-sub="collections">Collections</a>
   </div>
 
   <!-- ============ DASHBOARD (Startseite) ============ -->
@@ -362,6 +363,19 @@
     <div id="sold-list"></div>
   </section>
 
+  <!-- ============ COLLECTIONS (Meine Collections) ============ -->
+  <section class="view" id="view-collections">
+    <div class="hero">
+      <div>
+        <div class="label">Meine Collections</div>
+        <div class="value" style="font-size:1.7rem">Sammlungen mit Geschichte</div>
+        <div class="breakdown">Stelle Karten thematisch zusammen, wähle die Sichtbarkeit und teile sie mit der Community.</div>
+      </div>
+      <div class="actions"><button id="col-new-btn">+ Neue Collection</button></div>
+    </div>
+    <div id="col-my-list"></div>
+  </section>
+
   <!-- ============ MARKTPLATZ (Angebote / Gesuche / Trades) ============ -->
   <section class="view" id="view-marktplatz">
     <div class="hero">
@@ -426,6 +440,7 @@
         <button class="chip" data-tab="freunde">Freunde <span class="count" id="cm-friends-tab"></span></button>
         <button class="chip" data-tab="chat">Chat</button>
         <button class="chip" data-tab="forum">Forum</button>
+        <button class="chip" data-tab="collections">Collections</button>
         <button class="chip" data-tab="postfach">Postfach <span class="count" id="cm-unread-tab"></span></button>
         <button class="chip" data-tab="rangliste">Rangliste</button>
       </div>
@@ -489,6 +504,16 @@
         <button id="posts-new-btn" type="button">+ Beitrag</button>
       </div>
       <div id="posts-body"></div>
+    </div>
+    <div id="community-collections" style="display:none">
+      <div class="filterbar row" id="disc-sort">
+        <button class="chip active" data-sort="trending">🔥 Trending</button>
+        <button class="chip" data-sort="liked">❤️ Meistgelikt</button>
+        <button class="chip" data-sort="discussed">💬 Meistdiskutiert</button>
+        <button class="chip" data-sort="new">🆕 Neu</button>
+        <button class="chip" data-sort="random">🎲 Zufällig</button>
+      </div>
+      <div id="disc-body"></div>
     </div>
   </section>
 
@@ -881,6 +906,7 @@
     <div class="an-grid" id="pf-stats" style="margin-bottom:10px"></div>
     <div id="pf-highlights"></div>
     <div id="pf-activity"></div>
+    <div id="pf-collections"></div>
     <p id="pf-bio" class="msub" style="white-space:pre-wrap;margin:0 0 8px"></p>
     <div class="msub" id="pf-contact" style="margin-bottom:10px"></div>
     <div class="row" style="gap:8px;margin-bottom:12px">
@@ -1116,6 +1142,33 @@
     <div class="field"><label>Benutzername</label><input type="text" id="uname-in" maxlength="20" placeholder="z. B. TinyTokyo" autocomplete="off" /></div>
     <div class="row" style="margin-top:8px"><button id="uname-save">Namen festlegen</button></div>
     <p class="msub" id="uname-status" style="min-height:1.2em;margin:8px 0 0"></p>
+  </div>
+</div>
+<div class="modal-bg" id="col-modal">
+  <div class="modal">
+    <h3 id="colc-title">Neue Collection</h3>
+    <div class="field"><label>Name</label><input type="text" id="colc-name" maxlength="80" placeholder="z. B. Meine Lieblingskarten"/></div>
+    <div class="field"><label>Beschreibung (optional)</label><textarea id="colc-desc" rows="3" maxlength="1000" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 13px;color:var(--text);font:inherit;resize:vertical"></textarea></div>
+    <div class="mrow">
+      <div class="field"><label>Sichtbarkeit</label><select id="colc-vis"><option value="private">🔒 Privat</option><option value="unlisted">🔗 Nicht gelistet (nur per Link)</option><option value="public">🌍 Öffentlich</option></select></div>
+      <div class="field"><label>Cover-URL (optional)</label><input type="text" id="colc-cover" placeholder="leer = automatisch aus Karte"/></div>
+    </div>
+    <div class="row" style="gap:8px;margin-top:6px"><button id="colc-save">Speichern</button><button class="ghost" id="colc-close">Abbrechen</button></div>
+    <p class="msub" id="colc-status" style="min-height:1.2em;margin:8px 0 0"></p>
+  </div>
+</div>
+<div class="modal-bg" id="coldetail-modal">
+  <div class="modal" style="max-width:760px;position:relative;padding:0;overflow:hidden">
+    <button class="detail-close" id="coldetail-close" title="Schließen" style="z-index:3">✕</button>
+    <div id="coldetail"></div>
+  </div>
+</div>
+<div class="modal-bg" id="colpick-modal">
+  <div class="modal">
+    <h3>Karten hinzufügen</h3>
+    <p class="msub">Wähle Karten aus deiner Sammlung.</p>
+    <div id="colpick-body" style="max-height:52vh;overflow:auto;margin:6px 0"></div>
+    <div class="row" style="gap:8px;margin-top:6px"><button id="colpick-add">Hinzufügen</button><button class="ghost" id="colpick-close">Abbrechen</button></div>
   </div>
 </div>
 <script src="lib/supabase.js"></script>
@@ -1595,10 +1648,11 @@ function buildLangOptions() {
 // ---- Routing ----
 function route() {
   const view = (location.hash.replace('#/','') || 'dashboard');
+  if (view.indexOf('c/') === 0) { const _cid = view.slice(2); setTimeout(() => { try { openCollection(_cid); } catch {} }, 40); }
   const target = ['dashboard','sammlung','wunschliste','versiegelt','verkauft','analyse','einstellungen','graded','community','marktplatz'].includes(view) ? view : (view === 'suche' ? 'suche' : 'dashboard');
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + target).classList.add('active');
-  const BESTAND = ['sammlung','versiegelt','graded','verkauft','wunschliste'];
+  const BESTAND = ['sammlung','versiegelt','graded','verkauft','wunschliste','collections'];
   document.querySelectorAll('nav a').forEach(a => a.classList.toggle('active',
     a.dataset.view===target || (a.dataset.view==='sammlung' && BESTAND.includes(target))));
   const sub = document.getElementById('bestand-subnav');
@@ -1611,6 +1665,7 @@ function route() {
   if (target==='dashboard') loadDashboard();
   if (target==='sammlung') { loadCollection(); recordOpenSnapshot().then(loadHistory); }
   if (target==='wunschliste') loadWishlist();
+  if (target==='collections') loadMyCollections();
   if (target==='versiegelt') loadSealed();
   if (target==='verkauft') loadSold();
   if (target==='analyse') { recordOpenSnapshot().then(loadAnalyse); }
@@ -2454,6 +2509,7 @@ function cmShowTab(tab) {
   show('community-chat', tab==='chat');
   show('community-forum', tab==='forum');
   show('community-posts', tab==='beitraege');
+  show('community-collections', tab==='collections');
   if (tab!=='chat') teardownChat();
   if (tab==='postfach') loadInbox();
   if (tab==='rangliste') loadBoard();
@@ -2461,12 +2517,169 @@ function cmShowTab(tab) {
   if (tab==='chat') enterChat();
   if (tab==='forum') loadForum();
   if (tab==='beitraege') loadPosts();
+  if (tab==='collections') loadDiscover();
   ensurePresence();
 }
 document.getElementById('cm-tabs').addEventListener('click', e=>{
   const chip = e.target.closest('.chip'); if (!chip) return;
   cmShowTab(chip.dataset.tab);
 });
+
+// ===== Collections-System =====
+const VIS = { private: '🔒 Privat', unlisted: '🔗 Nicht gelistet', public: '🌍 Öffentlich' };
+let _openCol = null, discSort = 'trending';
+function collectionTile(c) {
+  const flag = countryFlag(c.author_country);
+  return `<div class="col-tile" data-cid="${c.id}">
+    <div class="col-cover">${c.cover ? `<img src="${escapeHtml(c.cover)}" loading="lazy" alt=""/>` : '<div class="col-cover-ph">📚</div>'}<span class="col-vis">${VIS[c.visibility] || ''}</span></div>
+    <div class="col-tbody">
+      <div class="col-name">${escapeHtml(c.name)}</div>
+      <div class="col-meta">${c.card_count} Karten · ❤️ ${c.like_count} · 💬 ${c.comment_count}${c.follower_count ? ` · 🔔 ${c.follower_count}` : ''}</div>
+      <div class="col-owner">${flag ? flag + ' ' : ''}${escapeHtml(c.author_name || 'Sammler')}</div>
+    </div>
+  </div>`;
+}
+async function loadMyCollections() {
+  await ensureMyUid().catch(()=>{});
+  const box = document.getElementById('col-my-list'); box.innerHTML = '<div class="empty loading">Lade Collections…</div>';
+  let rows = []; try { rows = await self.DB.listMyCollections(); }
+  catch (e) { box.innerHTML = `<div class="empty">${escapeHtml(e.message || 'Konnte Collections nicht laden. Wurde supabase-community-15.sql ausgeführt?')}</div>`; return; }
+  if (!rows.length) { box.innerHTML = '<div class="empty">Noch keine Collection – erstelle deine erste mit „+ Neue Collection".</div>'; return; }
+  box.innerHTML = '<div class="col-grid">' + rows.map(collectionTile).join('') + '</div>';
+  box.querySelectorAll('[data-cid]').forEach(el => el.addEventListener('click', () => openCollection(el.dataset.cid)));
+}
+document.getElementById('col-new-btn') && document.getElementById('col-new-btn').addEventListener('click', () => openColCreate(null));
+function openColCreate(existing) {
+  document.getElementById('colc-title').textContent = existing ? 'Collection bearbeiten' : 'Neue Collection';
+  document.getElementById('colc-name').value = existing ? existing.name : '';
+  document.getElementById('colc-desc').value = existing ? (existing.description || '') : '';
+  document.getElementById('colc-vis').value = existing ? existing.visibility : 'private';
+  document.getElementById('colc-cover').value = existing && existing.cover_url ? existing.cover_url : '';
+  document.getElementById('colc-status').textContent = '';
+  document.getElementById('col-modal').dataset.editId = existing ? existing.id : '';
+  document.getElementById('col-modal').classList.add('open');
+}
+document.getElementById('colc-save') && document.getElementById('colc-save').addEventListener('click', async () => {
+  const name = document.getElementById('colc-name').value.trim();
+  const st = document.getElementById('colc-status');
+  if (!name) { st.textContent = 'Bitte einen Namen eingeben.'; return; }
+  const payload = { name, description: document.getElementById('colc-desc').value.trim() || null, visibility: document.getElementById('colc-vis').value, coverUrl: document.getElementById('colc-cover').value.trim() || null, cover_url: document.getElementById('colc-cover').value.trim() || null };
+  const editId = document.getElementById('col-modal').dataset.editId;
+  st.textContent = 'Speichere…';
+  try {
+    if (editId) { await self.DB.updateCollection(editId, payload); document.getElementById('col-modal').classList.remove('open'); openCollection(editId); }
+    else { const col = await self.DB.createCollection(payload); document.getElementById('col-modal').classList.remove('open'); openCollection(col.id); }
+    loadMyCollections();
+  } catch (e) { st.textContent = e.message || 'Fehlgeschlagen.'; }
+});
+document.getElementById('colc-close') && document.getElementById('colc-close').addEventListener('click', () => document.getElementById('col-modal').classList.remove('open'));
+document.getElementById('col-modal') && document.getElementById('col-modal').addEventListener('click', e => { if (e.target.id === 'col-modal') document.getElementById('col-modal').classList.remove('open'); });
+
+function colCardTile(cc, mine) {
+  return `<div class="col-card" data-rowid="${cc.id}">
+    ${cc.image_url ? `<img src="${escapeHtml(cc.image_url)}" loading="lazy" alt="" data-act="opencard"/>` : '<div class="mc-ph" data-act="opencard">🃏</div>'}
+    <div class="col-card-name" title="${escapeHtml(cc.name || '')}">${escapeHtml(cc.name || '')}</div>
+    ${mine ? `<button class="col-card-x" data-act="rmcard" title="Aus Collection entfernen">✕</button>` : ''}
+  </div>`;
+}
+async function openCollection(id) {
+  await ensureMyUid().catch(()=>{});
+  document.getElementById('coldetail-modal').classList.add('open');
+  const box = document.getElementById('coldetail'); box.innerHTML = '<div class="empty loading">Lade…</div>';
+  let d; try { d = await self.DB.getCollection(id); } catch (e) { box.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; return; }
+  const c = d.collection; if (!c) { box.innerHTML = '<div class="empty">Collection nicht gefunden oder privat.</div>'; return; }
+  _openCol = { id: c.id, collection: c, cards: d.cards };
+  const mine = c.is_mine; const flag = countryFlag(c.author_country); const myr = c.my_reactions || [];
+  const react = (kind, emoji, count) => `<button class="col-react ${myr.includes(kind) ? 'on' : ''}" data-react="${kind}">${emoji} ${count || 0}</button>`;
+  box.innerHTML = `
+    <div class="col-hero">${c.cover ? `<img src="${escapeHtml(c.cover)}" alt=""/>` : ''}<div class="col-hero-ov"></div>
+      <div class="col-hero-txt"><span class="col-vis-b">${VIS[c.visibility] || ''}</span><h2>${escapeHtml(c.name)}</h2>
+        <div class="col-hero-owner" data-act="owner" data-uid="${escapeHtml(c.user_id)}">${flag ? flag + ' ' : ''}${escapeHtml(c.author_name || 'Sammler')}</div></div>
+    </div>
+    ${c.description ? `<p class="col-desc">${escapeHtml(c.description)}</p>` : ''}
+    <div class="col-stats">${c.card_count} Karten · 💬 ${c.comment_count} · 🔔 ${c.follower_count} Follower · erstellt ${new Date(c.created_at).toLocaleDateString('de-DE')}</div>
+    <div class="col-actions">
+      ${react('like', '❤️', c.like_count)}${react('fire', '🔥', c.fire_count)}${react('gem', '💎', c.gem_count)}${react('save', '⭐', c.save_count)}
+      <button class="col-follow ${c.followed ? 'on' : ''}" data-act="follow">${c.followed ? '🔔 Folge ich' : '🔔 Folgen'}</button>
+      <button class="ghost" data-act="share">📤 Link</button>
+      ${mine ? `<button data-act="addcards">+ Karten</button><button class="ghost" data-act="editcol">Bearbeiten</button><button class="ghost" data-act="delcol">Löschen</button>` : ''}
+    </div>
+    <div class="col-gallery">${d.cards.length ? d.cards.map(cc => colCardTile(cc, mine)).join('') : '<div class="empty" style="grid-column:1/-1">Noch keine Karten – füge welche über „+ Karten" hinzu.</div>'}</div>
+    <div class="dt-sec"><h4>💬 Kommentare</h4>
+      <form id="col-cmt-form" class="row" style="gap:8px" autocomplete="off"><input type="text" id="col-cmt-in" maxlength="2000" placeholder="Kommentieren…" style="flex:1"/><button type="submit">Senden</button></form>
+      <div id="col-comments" style="margin-top:12px"></div>
+    </div>`;
+  renderColComments(d.comments);
+  const cf = document.getElementById('col-cmt-form');
+  if (cf) cf.onsubmit = async (e) => { e.preventDefault(); const inp = document.getElementById('col-cmt-in'); const b = inp.value.trim(); if (!b) return; inp.value = ''; try { await self.DB.addCollectionComment(c.id, b); openCollection(c.id); } catch (er) { alert(er.message); inp.value = b; } };
+}
+function renderColComments(comments) {
+  const box = document.getElementById('col-comments'); if (!box) return;
+  if (!comments.length) { box.innerHTML = '<span class="msub">Noch keine Kommentare.</span>'; return; }
+  box.innerHTML = comments.map(m => { const flag = countryFlag(m.author_country); const t = new Date(m.created_at).toLocaleString('de-DE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); const del = m.user_id === myUid ? ` <span data-act="colcmt-del" data-id="${m.id}" style="cursor:pointer;color:var(--muted)">✕</span>` : ''; return `<div class="dt-comment"><div class="dc-head">${flag ? flag + ' ' : ''}<b>${escapeHtml(m.author_name || 'Sammler')}</b> · ${t}${del}</div><div class="dc-body">${escapeHtml(m.body)}</div></div>`; }).join('');
+}
+document.getElementById('coldetail-modal') && document.getElementById('coldetail-modal').addEventListener('click', async e => {
+  if (e.target.id === 'coldetail-modal') { document.getElementById('coldetail-modal').classList.remove('open'); return; }
+  const c = _openCol && _openCol.collection; if (!c) return;
+  const reactBtn = e.target.closest('[data-react]');
+  if (reactBtn) { const kind = reactBtn.dataset.react; const on = (c.my_reactions || []).includes(kind); try { await self.DB.toggleReaction(c.id, kind, on); openCollection(c.id); } catch (er) { alert(er.message); } return; }
+  const del = e.target.closest('[data-act="colcmt-del"]'); if (del) { try { await self.DB.deleteCollectionComment(del.dataset.id); openCollection(c.id); } catch (er) { alert(er.message); } return; }
+  const act = e.target.closest('[data-act]') && e.target.closest('[data-act]').dataset.act;
+  if (act === 'follow') { try { await self.DB.toggleFollowCollection(c.id, c.followed); openCollection(c.id); } catch (er) { alert(er.message); } }
+  else if (act === 'share') { const url = location.origin + location.pathname + '#/c/' + c.id; try { await navigator.clipboard.writeText(url); toast('Link kopiert'); } catch { prompt('Link kopieren:', url); } }
+  else if (act === 'owner') { const uid = e.target.closest('[data-uid]').dataset.uid; document.getElementById('coldetail-modal').classList.remove('open'); openProfile(uid); }
+  else if (act === 'addcards') openColPicker(c.id);
+  else if (act === 'editcol') openColCreate(c);
+  else if (act === 'delcol') { if (confirm('Diese Collection wirklich löschen?')) { try { await self.DB.deleteCollection(c.id); document.getElementById('coldetail-modal').classList.remove('open'); loadMyCollections(); } catch (er) { alert(er.message); } } }
+  else if (act === 'rmcard') { const row = e.target.closest('.col-card'); try { await self.DB.removeCollectionCard(row.dataset.rowid); openCollection(c.id); } catch (er) { alert(er.message); } }
+  else if (act === 'opencard') { const row = e.target.closest('.col-card'); const cc = (_openCol.cards || []).find(x => String(x.id) === row.dataset.rowid); if (cc) { document.getElementById('coldetail-modal').classList.remove('open'); openDetail({ game: cc.game, externalId: cc.external_id, name: cc.name, setName: cc.set_name, setCode: cc.set_code, number: cc.number, rarity: cc.rarity, imageUrl: cc.image_url, language: cc.language }); } }
+});
+
+// Karten-Picker (aus eigener Sammlung)
+async function openColPicker(collectionId) {
+  document.getElementById('colpick-modal').dataset.cid = collectionId;
+  document.getElementById('colpick-modal').classList.add('open');
+  const box = document.getElementById('colpick-body'); box.innerHTML = '<div class="empty loading">Lade Sammlung…</div>';
+  let owned = [];
+  try { const d = await (await fetch('api/collection')).json(); owned = (d.cards || []).filter(c => c.status !== 'sold'); } catch {}
+  if (!owned.length) { box.innerHTML = '<div class="empty">Deine Sammlung ist leer. Füge zuerst Karten über die Suche hinzu.</div>'; return; }
+  window._colPickOwned = owned;
+  box.innerHTML = owned.map((c, i) => `<label class="colpick-row"><input type="checkbox" value="${i}" style="width:auto"/>${c.image_url ? `<img src="${escapeHtml(c.image_url)}" loading="lazy" alt=""/>` : '<span class="colpick-ph">🃏</span>'}<span class="colpick-name">${escapeHtml(c.name)}<small>${escapeHtml(c.set_name || '')}</small></span></label>`).join('');
+}
+document.getElementById('colpick-close') && document.getElementById('colpick-close').addEventListener('click', () => document.getElementById('colpick-modal').classList.remove('open'));
+document.getElementById('colpick-add') && document.getElementById('colpick-add').addEventListener('click', async () => {
+  const cid = document.getElementById('colpick-modal').dataset.cid;
+  const owned = window._colPickOwned || [];
+  const sel = [...document.querySelectorAll('#colpick-body input:checked')].map(x => owned[Number(x.value)]).filter(Boolean);
+  if (!sel.length) { document.getElementById('colpick-modal').classList.remove('open'); return; }
+  try { await self.DB.addCollectionCards(cid, sel); document.getElementById('colpick-modal').classList.remove('open'); openCollection(cid); } catch (e) { alert(e.message); }
+});
+
+// Community: Collections entdecken
+async function loadDiscover(sort) {
+  discSort = sort || discSort;
+  const box = document.getElementById('disc-body'); box.innerHTML = '<div class="empty loading">Lade Collections…</div>';
+  let rows = []; try { rows = await self.DB.discoverCollections(discSort); }
+  catch (e) { box.innerHTML = `<div class="empty">${escapeHtml(e.message || 'Konnte Collections nicht laden. Wurde supabase-community-15.sql ausgeführt?')}</div>`; return; }
+  if (discSort === 'random') rows = rows.sort(() => Math.random() - 0.5);
+  if (!rows.length) { box.innerHTML = '<div class="empty">Noch keine öffentlichen Collections. Sei die/der Erste – erstelle eine unter Sammlung → Collections!</div>'; return; }
+  box.innerHTML = '<div class="col-grid">' + rows.map(collectionTile).join('') + '</div>';
+  box.querySelectorAll('[data-cid]').forEach(el => el.addEventListener('click', () => openCollection(el.dataset.cid)));
+}
+document.getElementById('disc-sort') && document.getElementById('disc-sort').addEventListener('click', e => { const chip = e.target.closest('.chip[data-sort]'); if (!chip) return; document.querySelectorAll('#disc-sort .chip').forEach(c => c.classList.toggle('active', c === chip)); loadDiscover(chip.dataset.sort); });
+
+// Profil: Collections der Person
+async function loadProfileCollections(userId) {
+  const box = document.getElementById('pf-collections'); if (!box) return; box.innerHTML = '';
+  try {
+    const rows = (await self.DB.listUserCollections(userId)).filter(c => c.visibility === 'public' || c.is_mine);
+    if (!rows.length) return;
+    box.innerHTML = `<div class="pf-sec-h">📚 Collections (${rows.length})</div><div class="home-scroller">${rows.map(c => `<div class="col-tile" style="scroll-snap-align:start;grid-auto-columns:180px" data-cid="${c.id}"><div class="col-cover">${c.cover ? `<img src="${escapeHtml(c.cover)}" loading="lazy" alt=""/>` : '<div class="col-cover-ph">📚</div>'}</div><div class="col-tbody"><div class="col-name">${escapeHtml(c.name)}</div><div class="col-meta">${c.card_count} Karten · ❤️ ${c.like_count}</div></div></div>`).join('')}</div>`;
+    box.querySelectorAll('[data-cid]').forEach(el => el.addEventListener('click', () => { document.getElementById('profile-modal').classList.remove('open'); openCollection(el.dataset.cid); }));
+  } catch {}
+}
+document.getElementById('coldetail-close') && document.getElementById('coldetail-close').addEventListener('click', () => document.getElementById('coldetail-modal').classList.remove('open'));
+document.getElementById('colpick-modal') && document.getElementById('colpick-modal').addEventListener('click', e => { if (e.target.id === 'colpick-modal') document.getElementById('colpick-modal').classList.remove('open'); });
 
 // ===== Community-Beiträge (Feed, Phase 6) =====
 const POST_KINDS = { showcase:['🖼️','Showcase'], pulls:['🎉','Pulls'], deckbuilding:['🃏','Deckbuilding'], diskussion:['💬','Diskussion'], collection_update:['📈','Collection Update'], guide:['📖','Guide'], review:['⭐','Review'], trade:['🔄','Tauschangebot'] };
@@ -3573,7 +3786,7 @@ async function openProfile(userId) {
   const _av = document.getElementById('pf-avatar'); if (_av) _av.textContent = ((p.name||'S').trim().split(/\s+/).map(w=>w[0]||'').join('').slice(0,2).toUpperCase()) || 'S';
   const _lp = levelProgress(_upoints); const _xp = document.getElementById('pf-xp');
   if (_xp) _xp.innerHTML = `<div class="pf-xp-label"><span>Level ${_lp.n} · ${escapeHtml(_lp.name)}</span><span>${_lp.next!=null?`${_lp.into} / ${_lp.span} XP`:'Max-Level'}</span></div><div class="pf-xp-bar"><div class="pf-xp-fill" style="width:${_lp.pct}%"></div></div>`;
-  loadProfileHighlights(userId); renderProfileActivity(_uposts);
+  loadProfileHighlights(userId); renderProfileActivity(_uposts); loadProfileCollections(userId);
   // Vertrauensindikatoren (nur zeigen, was wirklich zutrifft)
   const ind = [];
   if (p.email_verified) ind.push('🟢 E-Mail-Adresse bestätigt');

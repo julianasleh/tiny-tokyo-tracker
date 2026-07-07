@@ -555,3 +555,43 @@
     .sh-go { padding:11px 15px; }
     .sh-kbd { display:none; }
   }
+  /* ===== Collections ===== */
+  .col-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:16px; }
+  .col-tile { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); overflow:hidden; cursor:pointer; box-shadow:var(--shadow-sm); transition:transform var(--trans),box-shadow var(--trans),border-color var(--trans); }
+  .col-tile:hover { transform:translateY(-4px); box-shadow:var(--shadow-lg); border-color:var(--border-strong); }
+  .col-cover { position:relative; aspect-ratio:16/9; background:#0a0c10; }
+  .col-cover img { width:100%; height:100%; object-fit:cover; }
+  .col-cover-ph { width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size:2rem; color:var(--muted); }
+  .col-vis { position:absolute; top:8px; right:8px; background:color-mix(in srgb, var(--surface) 80%, transparent); backdrop-filter:blur(6px); border:1px solid var(--border); border-radius:999px; padding:2px 9px; font-size:.68rem; font-weight:700; }
+  .col-tbody { padding:12px 14px 14px; }
+  .col-name { font-weight:600; font-size:1rem; line-height:1.3; }
+  .col-meta { color:var(--muted); font-size:.76rem; margin-top:5px; }
+  .col-owner { color:var(--muted); font-size:.76rem; margin-top:3px; }
+  /* Collection-Detail */
+  #coldetail { max-height:88vh; overflow-y:auto; }
+  #coldetail .col-desc, #coldetail .col-stats, #coldetail .col-actions, #coldetail .col-gallery, #coldetail .dt-sec { padding-left:20px; padding-right:20px; }
+  #coldetail .dt-sec { padding-bottom:22px; }
+  .col-hero { position:relative; height:180px; background:linear-gradient(135deg,var(--accent),var(--accent-2)); overflow:hidden; }
+  .col-hero img { width:100%; height:100%; object-fit:cover; }
+  .col-hero-ov { position:absolute; inset:0; background:linear-gradient(to top, rgba(0,0,0,.78), rgba(0,0,0,.15) 60%, transparent); }
+  .col-hero-txt { position:absolute; left:20px; right:20px; bottom:14px; color:#fff; }
+  .col-hero-txt h2 { margin:6px 0 2px; font-family:'Space Grotesk',sans-serif; font-size:1.6rem; text-shadow:0 2px 8px rgba(0,0,0,.5); }
+  .col-vis-b { background:rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.25); border-radius:999px; padding:3px 10px; font-size:.72rem; font-weight:700; }
+  .col-hero-owner { font-size:.85rem; cursor:pointer; opacity:.95; }
+  .col-desc { margin:14px 0 6px; color:var(--text); white-space:pre-wrap; }
+  .col-stats { color:var(--muted); font-size:.82rem; margin:6px 0 12px; }
+  .col-actions { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+  .col-react { background:var(--surface-2); border:1px solid var(--border); color:var(--text); border-radius:999px; padding:8px 13px; font-size:.85rem; box-shadow:none; }
+  .col-react:hover { border-color:var(--accent); transform:translateY(-1px); }
+  .col-react.on { background:var(--accent-weak); border-color:var(--accent); color:var(--accent); }
+  .col-follow { background:var(--surface-2); border:1px solid var(--border); color:var(--text); border-radius:999px; padding:8px 13px; font-size:.85rem; box-shadow:none; }
+  .col-follow.on { background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
+  .col-gallery { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:12px; margin-bottom:8px; }
+  .col-card { position:relative; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r); overflow:hidden; }
+  .col-card img, .col-card .mc-ph { width:100%; aspect-ratio:5/7; object-fit:contain; background:#0a0c10; cursor:zoom-in; display:flex; align-items:center; justify-content:center; font-size:1.6rem; }
+  .col-card-name { padding:7px 8px; font-size:.72rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .col-card-x { position:absolute; top:5px; right:5px; background:rgba(0,0,0,.55); color:#fff; border:none; border-radius:50%; width:22px; height:22px; padding:0; font-size:.8rem; line-height:1; box-shadow:none; }
+  .col-card-x:hover { background:var(--neg); transform:none; }
+  .colpick-row { display:flex; align-items:center; gap:11px; padding:8px 6px; border-bottom:1px solid var(--border); cursor:pointer; }
+  .colpick-row img, .colpick-ph { width:34px; height:47px; object-fit:contain; background:#0a0c10; border-radius:4px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .colpick-name { font-size:.86rem; min-width:0; } .colpick-name small { display:block; color:var(--muted); font-size:.74rem; }

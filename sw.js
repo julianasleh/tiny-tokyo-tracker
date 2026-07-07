@@ -3,7 +3,7 @@
 // selbst beantwortet (siehe window.fetch-Override in index.html) -- der Service
 // Worker muss dafuer nichts mehr tun.
 
-const CACHE_VERSION = 'ttt-shell-v46';
+const CACHE_VERSION = 'ttt-shell-v47';
 const APP_SHELL = [
   './',
   './index.html',

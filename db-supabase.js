@@ -566,6 +566,86 @@
     if (liked) { const { error } = await getClient().from('community_post_likes').delete().eq('post_id', postId).eq('user_id', uid); if (error) throw new Error(error.message); }
     else { const { error } = await getClient().from('community_post_likes').insert({ post_id: postId, user_id: uid }); if (error) throw new Error(error.message); }
   }
+  // --- Collections -----------------------------------------------------------
+  async function listMyCollections() {
+    const uid = await requireUserId();
+    return must(await getClient().from('collections_view').select('*').eq('user_id', uid).order('updated_at', { ascending: false }));
+  }
+  async function listUserCollections(userId) {
+    return must(await getClient().from('collections_view').select('*').eq('user_id', userId).order('updated_at', { ascending: false }));
+  }
+  async function discoverCollections(sort) {
+    let q = getClient().from('collections_view').select('*').eq('visibility', 'public').limit(60);
+    if (sort === 'new') q = q.order('created_at', { ascending: false });
+    else if (sort === 'liked') q = q.order('like_count', { ascending: false });
+    else if (sort === 'discussed') q = q.order('comment_count', { ascending: false });
+    else q = q.order('last_activity', { ascending: false });
+    return must(await q);
+  }
+  async function getCollection(id) {
+    const collection = must(await getClient().from('collections_view').select('*').eq('id', id).maybeSingle());
+    if (!collection) return { collection: null, cards: [], comments: [] };
+    const cards = must(await getClient().from('collection_cards').select('*').eq('collection_id', id).order('position', { ascending: true }).order('id', { ascending: true }));
+    const comments = must(await getClient().from('collection_comments').select('*').eq('collection_id', id).order('created_at', { ascending: true }));
+    return { collection, cards, comments };
+  }
+  async function createCollection(c) {
+    const uid = await requireUserId();
+    const { data, error } = await getClient().from('collections').insert({
+      user_id: uid, name: c.name, description: c.description || null,
+      visibility: c.visibility || 'private', cover_url: c.coverUrl || null, game: c.game || null,
+    }).select().single();
+    if (error) throw new Error(error.message);
+    return data;
+  }
+  async function updateCollection(id, patch) {
+    const allowed = {};
+    for (const k of ['name', 'description', 'visibility', 'cover_url', 'game']) if (patch[k] !== undefined) allowed[k] = patch[k];
+    allowed.updated_at = new Date().toISOString();
+    const { data, error } = await getClient().from('collections').update(allowed).eq('id', id).select().single();
+    if (error) throw new Error(error.message);
+    return data;
+  }
+  async function deleteCollection(id) {
+    const { error } = await getClient().from('collections').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  }
+  async function addCollectionCards(collectionId, cards) {
+    const uid = await requireUserId();
+    const rows = (cards || []).map((c) => ({
+      collection_id: collectionId, user_id: uid, game: c.game, external_id: c.external_id ?? c.externalId ?? null,
+      name: c.name, set_name: c.set_name ?? c.setName ?? null, set_code: c.set_code ?? c.setCode ?? null,
+      number: c.number ?? null, rarity: c.rarity ?? null, image_url: c.image_url ?? c.imageUrl ?? null, language: c.language ?? c.lang ?? null,
+    }));
+    if (!rows.length) return [];
+    const { data, error } = await getClient().from('collection_cards').insert(rows).select();
+    if (error) throw new Error(error.message);
+    return data;
+  }
+  async function removeCollectionCard(rowId) {
+    const { error } = await getClient().from('collection_cards').delete().eq('id', rowId);
+    if (error) throw new Error(error.message);
+  }
+  async function toggleReaction(collectionId, kind, active) {
+    const uid = await requireUserId();
+    if (active) { const { error } = await getClient().from('collection_reactions').delete().eq('collection_id', collectionId).eq('user_id', uid).eq('kind', kind); if (error) throw new Error(error.message); }
+    else { const { error } = await getClient().from('collection_reactions').insert({ collection_id: collectionId, user_id: uid, kind }); if (error) throw new Error(error.message); }
+  }
+  async function toggleFollowCollection(collectionId, following) {
+    const uid = await requireUserId();
+    if (following) { const { error } = await getClient().from('collection_followers').delete().eq('collection_id', collectionId).eq('user_id', uid); if (error) throw new Error(error.message); }
+    else { const { error } = await getClient().from('collection_followers').insert({ collection_id: collectionId, user_id: uid }); if (error) throw new Error(error.message); }
+  }
+  async function addCollectionComment(collectionId, body) {
+    const uid = await requireUserId();
+    const { data, error } = await getClient().from('collection_comments').insert({ collection_id: collectionId, user_id: uid, body }).select().single();
+    if (error) throw new Error(error.message);
+    return data;
+  }
+  async function deleteCollectionComment(id) {
+    const { error } = await getClient().from('collection_comments').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  }
 
   // --- Nachrichten -----------------------------------------------------------
   async function listMessages() {
@@ -815,6 +895,8 @@
     init, signUp, nameAvailable, signIn, signOut, getSession, onAuthChange, resetPassword, updatePassword,
     getSetting, setSetting, listMarket, listSeeking, listCardComments, addCardComment, deleteCardComment,
     listPosts, getPost, createPost, deletePost, addPostComment, deletePostComment, togglePostLike,
+    listMyCollections, listUserCollections, discoverCollections, getCollection, createCollection, updateCollection, deleteCollection,
+    addCollectionCards, removeCollectionCard, toggleReaction, toggleFollowCollection, addCollectionComment, deleteCollectionComment,
     listMessages, unreadMessages, sendMessage, markMessagesRead, deleteMessage, leaderboard,
     getProfile, listRatings, rateUser, deleteRating,
     listTrades, createTrade, updateTrade, openTradesCount,
