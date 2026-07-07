@@ -1649,7 +1649,7 @@ function buildLangOptions() {
 function route() {
   const view = (location.hash.replace('#/','') || 'dashboard');
   if (view.indexOf('c/') === 0) { const _cid = view.slice(2); setTimeout(() => { try { openCollection(_cid); } catch {} }, 40); }
-  const target = ['dashboard','sammlung','wunschliste','versiegelt','verkauft','analyse','einstellungen','graded','community','marktplatz'].includes(view) ? view : (view === 'suche' ? 'suche' : 'dashboard');
+  const target = ['dashboard','sammlung','wunschliste','versiegelt','verkauft','analyse','einstellungen','graded','community','marktplatz','collections'].includes(view) ? view : (view === 'suche' ? 'suche' : 'dashboard');
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + target).classList.add('active');
   const BESTAND = ['sammlung','versiegelt','graded','verkauft','wunschliste','collections'];
