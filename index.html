@@ -496,10 +496,8 @@
         <button class="chip" data-k="pulls">🎉 Pulls</button>
         <button class="chip" data-k="deckbuilding">🃏 Deckbuilding</button>
         <button class="chip" data-k="diskussion">💬 Diskussion</button>
-        <button class="chip" data-k="collection_update">📈 Collection</button>
         <button class="chip" data-k="guide">📖 Guide</button>
         <button class="chip" data-k="review">⭐ Review</button>
-        <button class="chip" data-k="trade">🔄 Tausch</button>
         <span class="ci-spacer"></span>
         <button id="posts-new-btn" type="button">+ Beitrag</button>
       </div>
@@ -1118,7 +1116,7 @@
     <h3>Beitrag erstellen</h3>
     <div class="mrow">
       <div class="field"><label>Art</label><select id="pcomp-kind">
-        <option value="showcase">🖼️ Showcase</option><option value="pulls">🎉 Pulls</option><option value="deckbuilding">🃏 Deckbuilding</option><option value="diskussion">💬 Diskussion</option><option value="collection_update">📈 Collection Update</option><option value="guide">📖 Guide</option><option value="review">⭐ Review</option><option value="trade">🔄 Tauschangebot</option>
+        <option value="showcase">🖼️ Showcase</option><option value="pulls">🎉 Pulls</option><option value="deckbuilding">🃏 Deckbuilding</option><option value="diskussion">💬 Diskussion</option><option value="guide">📖 Guide</option><option value="review">⭐ Review</option>
       </select></div>
       <div class="field"><label>Spiel (optional)</label><select id="pcomp-game"><option value="">–</option><option value="pokemon">Pokémon</option><option value="magic">Magic</option><option value="yugioh">Yu-Gi-Oh</option><option value="onepiece">One Piece</option></select></div>
     </div>
@@ -1167,7 +1165,18 @@
   <div class="modal">
     <h3>Karten hinzufügen</h3>
     <p class="msub">Wähle Karten aus deiner Sammlung.</p>
-    <div id="colpick-body" style="max-height:52vh;overflow:auto;margin:6px 0"></div>
+    <div class="filterbar row" id="colpick-filter" style="margin:6px 0">
+      <div class="row" id="colpick-games">
+        <button type="button" class="chip active" data-g="">Alle</button>
+        <button type="button" class="chip" data-g="pokemon">Pokémon</button>
+        <button type="button" class="chip" data-g="magic">Magic</button>
+        <button type="button" class="chip" data-g="yugioh">Yu-Gi-Oh</button>
+        <button type="button" class="chip" data-g="onepiece">One Piece</button>
+      </div>
+      <span class="ci-spacer"></span>
+      <input type="text" id="colpick-search" placeholder="Name…" style="max-width:160px" />
+    </div>
+    <div id="colpick-body" style="max-height:48vh;overflow:auto;margin:6px 0"></div>
     <div class="row" style="gap:8px;margin-top:6px"><button id="colpick-add">Hinzufügen</button><button class="ghost" id="colpick-close">Abbrechen</button></div>
   </div>
 </div>
@@ -2636,21 +2645,40 @@ document.getElementById('coldetail-modal') && document.getElementById('coldetail
 });
 
 // Karten-Picker (aus eigener Sammlung)
+let _colPickGame = '', _colPickSel = new Set();
 async function openColPicker(collectionId) {
   document.getElementById('colpick-modal').dataset.cid = collectionId;
   document.getElementById('colpick-modal').classList.add('open');
+  _colPickGame = ''; _colPickSel = new Set();
+  document.querySelectorAll('#colpick-games .chip').forEach(c => c.classList.toggle('active', c.dataset.g === ''));
+  const si = document.getElementById('colpick-search'); if (si) si.value = '';
   const box = document.getElementById('colpick-body'); box.innerHTML = '<div class="empty loading">Lade Sammlung…</div>';
   let owned = [];
   try { const d = await (await fetch('api/collection')).json(); owned = (d.cards || []).filter(c => c.status !== 'sold'); } catch {}
-  if (!owned.length) { box.innerHTML = '<div class="empty">Deine Sammlung ist leer. Füge zuerst Karten über die Suche hinzu.</div>'; return; }
   window._colPickOwned = owned;
-  box.innerHTML = owned.map((c, i) => `<label class="colpick-row"><input type="checkbox" value="${i}" style="width:auto"/>${c.image_url ? `<img src="${escapeHtml(c.image_url)}" loading="lazy" alt=""/>` : '<span class="colpick-ph">🃏</span>'}<span class="colpick-name">${escapeHtml(c.name)}<small>${escapeHtml(c.set_name || '')}</small></span></label>`).join('');
+  if (!owned.length) { box.innerHTML = '<div class="empty">Deine Sammlung ist leer. Füge zuerst Karten über die Suche hinzu.</div>'; return; }
+  renderColPick();
 }
+function renderColPick() {
+  const owned = window._colPickOwned || [];
+  const term = (document.getElementById('colpick-search').value || '').trim().toLowerCase();
+  const box = document.getElementById('colpick-body');
+  const rows = [];
+  owned.forEach((c, i) => {
+    if (_colPickGame && c.game !== _colPickGame) return;
+    if (term && !String(c.name || '').toLowerCase().includes(term)) return;
+    rows.push(`<label class="colpick-row"><input type="checkbox" value="${i}" ${_colPickSel.has(i) ? 'checked' : ''} style="width:auto"/>${c.image_url ? `<img src="${escapeHtml(c.image_url)}" loading="lazy" alt=""/>` : '<span class="colpick-ph">🃏</span>'}<span class="colpick-name">${escapeHtml(c.name)}<small>${escapeHtml(GAME_LABEL[c.game] || c.game || '')}${c.set_name ? ' · ' + escapeHtml(c.set_name) : ''}</small></span></label>`);
+  });
+  box.innerHTML = rows.length ? rows.join('') : '<div class="empty">Keine Karten passen zum Filter.</div>';
+}
+document.getElementById('colpick-body') && document.getElementById('colpick-body').addEventListener('change', e => { const cb = e.target.closest('input[type="checkbox"]'); if (!cb) return; const i = Number(cb.value); if (cb.checked) _colPickSel.add(i); else _colPickSel.delete(i); });
+document.getElementById('colpick-games') && document.getElementById('colpick-games').addEventListener('click', e => { const chip = e.target.closest('.chip'); if (!chip) return; document.querySelectorAll('#colpick-games .chip').forEach(c => c.classList.toggle('active', c === chip)); _colPickGame = chip.dataset.g; renderColPick(); });
+document.getElementById('colpick-search') && document.getElementById('colpick-search').addEventListener('input', renderColPick);
 document.getElementById('colpick-close') && document.getElementById('colpick-close').addEventListener('click', () => document.getElementById('colpick-modal').classList.remove('open'));
 document.getElementById('colpick-add') && document.getElementById('colpick-add').addEventListener('click', async () => {
   const cid = document.getElementById('colpick-modal').dataset.cid;
   const owned = window._colPickOwned || [];
-  const sel = [...document.querySelectorAll('#colpick-body input:checked')].map(x => owned[Number(x.value)]).filter(Boolean);
+  const sel = [..._colPickSel].map(i => owned[i]).filter(Boolean);
   if (!sel.length) { document.getElementById('colpick-modal').classList.remove('open'); return; }
   try { await self.DB.addCollectionCards(cid, sel); document.getElementById('colpick-modal').classList.remove('open'); openCollection(cid); } catch (e) { alert(e.message); }
 });
